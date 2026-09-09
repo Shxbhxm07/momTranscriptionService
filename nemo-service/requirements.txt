@@ -1,0 +1,30 @@
+# Speaker diarization + speaker identification service.
+#
+# Pinned deliberately: unpinned builds are not reproducible (the previous Dockerfile
+# git-cloned NeMo's main branch, so two builds a month apart produced different
+# software), and a pinned list is what lets these wheels be vendored for an
+# air-gapped/offline client build later.
+
+# --- NeMo -------------------------------------------------------------------
+# ASR collection ONLY. The service uses exactly two NeMo APIs:
+#   nemo.collections.asr.models.EncDecSpeakerLabelModel      (TitaNet voiceprints)
+#   nemo.collections.asr.models.clustering_diarizer.ClusteringDiarizer
+# [all] would additionally pull LLM/NLP/TTS/multimodal collections we never touch.
+nemo_toolkit[asr]==2.7.3
+
+# NOTE: torch is intentionally NOT listed. The NVIDIA base image ships a custom
+# build tuned for this GPU (Blackwell/sm_121, CUDA 13.1). Installing torch from
+# PyPI would replace it and silently lose GPU support — which would take
+# diarization from ~60s to ~2hrs per meeting. Verified: nemo_toolkit[asr] resolves
+# cleanly against the vendor torch without pulling its own.
+
+# --- Service layer ----------------------------------------------------------
+fastapi==0.136.1
+uvicorn[standard]==0.47.0
+python-multipart==0.0.29
+qdrant-client==1.18.0
+
+# --- Direct imports in our own code ----------------------------------------
+# (pulled in transitively by NeMo too, but pinned here because core/ imports them
+# directly — so an upstream change can't remove them from under us)
+soundfile==0.13.1

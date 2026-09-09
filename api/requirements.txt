@@ -1,0 +1,41 @@
+# Deliberately tiny. Dropping Tara/NeMo/LLaMA removed torch, transformers, librosa,
+# soundfile and nemo_toolkit — the ~47 GB of dependencies that existed only to serve
+# models this API does not use. Nothing here talks to a cloud service.
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+requests==2.31.0
+
+# ── document translation (POST /translate-document) ──────────────────────────
+# All four are pure-Python or prebuilt wheels with no service behind them, and none makes
+# a network call: the translation model is llama-service's, reached over HTTP like every
+# other model in this stack.
+
+# PDF text extraction AND page rasterization for OCR — one dependency doing both, so
+# there is no second PDF stack to keep in sync.
+#
+# CHOSEN OVER pypdf ON A MEASUREMENT, and it is not close. On the same Hindi PDF, pypdf
+# returned mangled Devanagari with substituted characters and no word breaks
+# ("वित्तमंत्रालयनेसभीकेंद्रीयसरकेंरविभीगों..."), while pypdfium2 returned correct text whose
+# only defect was an occasional missing space. Devanagari is the whole point of this
+# endpoint, so the extractor that survives it is the one that ships.
+pypdfium2==5.13.0
+
+# .docx reader. Used for .doc too, after LibreOffice converts it (see utils/documents.py).
+python-docx==1.2.0
+
+# Wrapper around the tesseract BINARY, which the Dockerfile installs together with its
+# Hindi and English language data. The wheel alone does nothing.
+pytesseract==0.3.13
+
+# Rasterized pages are handed to tesseract as PIL images.
+Pillow==12.3.0
+
+# MinIO / S3 object storage for the Kafka ingestion path: audio comes in by object key and the
+# generated .docx goes back out. The `minio` client is used rather than boto3 because this only
+# ever talks to MinIO and it is a fraction of the dependency weight.
+minio==7.2.7
+
+# Elasticsearch client for the Kafka ingestion path. Pinned to the 8.x line to match the server;
+# the 8 and 9 clients reject each other's servers on the version-compatibility handshake.
+elasticsearch==8.14.0

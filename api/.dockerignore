@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+samples/
+test_api.sh
+README.md
+samples/youtube/

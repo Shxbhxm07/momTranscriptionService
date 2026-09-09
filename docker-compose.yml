@@ -1,0 +1,271 @@
+# Offline audio → English transcript → English MoM. FIVE services, self-contained.
+#
+# Every build context is inside this directory — this project no longer references the
+# MoM repo it was extracted from. The only things outside it are the two large model
+# weight directories, which are host paths set in .env (see .env.example); they are
+# 61 GB and 2.9 GB, far too big to vendor into a source tree.
+#
+#   docker compose up -d
+#   curl -F "audio=@meeting.mp3" http://localhost:8000/transcribe-and-generate-mom
+#
+# The MoM stack this was cut down from ran ten services (backend gateway, speech router,
+# tara, nemo, llama, vllm, chatterbox, postgres, qdrant, frontend). Four remain:
+#
+#   whisper-server  GPU  speech → English text        (ggml-large-v3, whisper.cpp)
+#   nemo-service    GPU  who spoke when               (TitaNet, vendored in ./nemo-service)
+#   vllm            GPU  serves the LLM               (gpt-oss-120b, mxfp4)
+#   llama-service   CPU  transcript → structured MoM  (vendored in ./llama-service)
+#   transcribe-api  CPU  the one public endpoint
+#
+# Three GPU services share the GB10's 121 GB unified memory, and the split is tight: the
+# LLM weights alone are 61 GB. vLLM is pinned to 0.60 — high enough that it can allocate a
+# KV cache, low enough that whisper and NeMo still fit. Both failure modes are documented
+# on the flag itself. Startup ORDER also matters; see the note on whisper-server.
+#
+# NOTE ON `runtime: nvidia`: this is the GB10's default runtime. It is stated explicitly
+# so the file also works on a host where it is not the default.
+services:
+
+  # ── the model ──────────────────────────────────────────────────────────────
+  # whisper.cpp large-v3 on CUDA. Loads the 2.9 GB ggml model into GPU memory ONCE at
+  # startup and serves every request from there. Reused as-is from the MoM stack
+  # (./whisper-service), which builds whisper.cpp v1.8.4 from source for six GPU
+  # generations rather than baking in a host-compiled binary.
+  whisper-server:
+    build:
+      context: ./whisper-service
+      dockerfile: Dockerfile
+    image: offline-mom-whisper:latest
+    container_name: offline-mom-whisper
+    runtime: nvidia
+    # STARTUP ORDER IS LOAD-BEARING, not cosmetic. vLLM sizes its KV cache from the memory
+    # that is FREE when it starts, so if whisper (~4 GB) and TitaNet are already resident it
+    # fails outright with "No available memory for the cache blocks" — even though the same
+    # three models coexist happily once running. vLLM must claim its share first; the small
+    # models then fit around it. This costs nothing: vLLM's ~8 min load is the critical path
+    # either way.
+    depends_on:
+      vllm:
+        condition: service_healthy
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - WHISPER_THREADS=8
+    volumes:
+      # Weights stay OUT of the image and are mounted read-only. ggml-large-v3.bin is the
+      # multilingual model — the .en variants CANNOT translate (whisper.cpp silently
+      # disables the translate task on a non-multilingual model), so this path must point
+      # at a multilingual checkpoint or Hindi input comes back as Hindi.
+      - ${WHISPER_MODELS_DIR:-/home/admin/whisper.cpp/models}:/models:ro
+    ports:
+      - "8080:8080"     # host-side debugging only; the API talks over the compose network
+    restart: unless-stopped
+    healthcheck:
+      # whisper.cpp binds the port only AFTER the model is loaded, so "port open" is a
+      # true "model ready" signal rather than just "process started".
+      test: ["CMD", "python3", "-c", "import socket,sys; s=socket.socket(); s.settimeout(3); sys.exit(0 if s.connect_ex(('127.0.0.1',8080))==0 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 16
+      start_period: 40s
+
+  # ── the API ────────────────────────────────────────────────────────────────
+  transcribe-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: offline-mom-api:latest
+    container_name: offline-mom-api
+    depends_on:
+      whisper-server:
+        condition: service_healthy    # don't accept uploads before the model is on the GPU
+      llama-service:
+        condition: service_healthy    # ... nor before the MoM writer can answer
+      nemo-service:
+        condition: service_healthy    # ... nor before the diarizer can label speakers
+    environment:
+      - WHISPERCPP_URL=http://whisper-server:8080
+      - NEMO_URL=http://nemo-service:8003
+      - LLAMA_URL=http://llama-service:8001
+      - ENABLE_DIARIZATION=true
+      # Optional quality/behaviour knobs — see config.py for what each one costs.
+      - FILTER_HALLUCINATIONS=true
+      - ENABLE_NOISE_REDUCTION=false
+      # Document translation (POST /translate-document). OCR is what makes SCANNED PDFs
+      # work; tesseract and its Hindi/English data are baked into the image at build time,
+      # so this stays offline. Turn it off and scanned uploads return a 422 explaining why.
+      - ENABLE_OCR=true
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # ── the LLM ────────────────────────────────────────────────────────────────
+  # gpt-oss-120b via vLLM. Spec transcribed from the MoM stack's offline overlay
+  # (the MoM project's docker-compose.offline.yml) so behaviour is identical: same flags,
+  # same mount, same tuning env. 61 GB of weights on disk, ~61 GB resident.
+  vllm:
+    image: nvcr.io/nvidia/vllm:26.04-py3
+    container_name: offline-mom-vllm
+    runtime: nvidia
+    command:
+      - "vllm"
+      - "serve"
+      - "/models/gpt-oss-120b"
+      - "--served-model-name"
+      - "gpt-oss-120b"           # must match LLM_MODEL_PATH in llama-service, or llm_manager
+      - "--host"                 # silently falls back to whatever model IS loaded
+      - "0.0.0.0"
+      - "--port"
+      - "8004"
+      - "--quantization"
+      - "mxfp4"
+      - "--max-model-len"
+      - "32768"
+      - "--max-num-seqs"
+      - "4"
+      - "--gpu-memory-utilization"
+      # 0.60. This number is squeezed from BOTH sides and was found by measurement, not
+      # taste — the working range on this box is narrow, so do not "tidy" it.
+      #
+      #   TOO HIGH (the MoM stack's 0.62): vLLM takes 76.3 GB and whisper 4.2 GB of the
+      #     GB10's 121 GB unified memory. Nominally that leaves room, but reading the 61 GB
+      #     checkpoint fills the page cache, so actual free memory drops to ~1 GB and NeMo
+      #     cannot get contiguous device memory — the first /diarize dies with
+      #     "CUDA error: out of memory" while every container still reports healthy.
+      #
+      #   TOO LOW (0.55): 0.55 x 121 GB = 66.5 GB, and the weights alone are ~61 GB. What
+      #     is left does not cover activations plus CUDA graphs plus KV cache, so vLLM
+      #     refuses to start at all: "No available memory for the cache blocks".
+      #     (It came up at 0.55 once on a freshly-drained machine. That was luck, not
+      #     headroom — it fails from a normal warm state.)
+      - "0.60"
+      - "--attention-backend"
+      - "TRITON_ATTN"
+      - "--moe-backend"
+      - "marlin"
+    environment:
+      - VLLM_MXFP4_BACKEND=marlin
+      - VLLM_MARLIN_USE_ATOMIC_ADD=1
+      - VLLM_USE_FLASHINFER_MOE_FP4=0
+      - VLLM_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS=1
+      - HF_HUB_OFFLINE=1         # air-gap: weights are on disk, never reach out
+      - TRANSFORMERS_OFFLINE=1
+      - VLLM_NO_USAGE_STATS=1    # no telemetry from an air-gapped box
+      - DO_NOT_TRACK=1
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ${LLM_MODEL_DIR:-/home/admin/models/openai/gpt-oss-120b}:/models/gpt-oss-120b:ro
+    ports:
+      - "8004:8004"              # host-side health checks / debugging
+    restart: unless-stopped
+    healthcheck:
+      # Ready = the model is actually being SERVED, not just that the port is open. vLLM
+      # binds early and answers /v1/models only once the weights are resident.
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if b'gpt-oss-120b' in urllib.request.urlopen('http://localhost:8004/v1/models',timeout=5).read() else 1)"]
+      interval: 20s
+      timeout: 10s
+      retries: 40
+      start_period: 600s         # 61 GB off disk — measured 7m42s from cold on the GB10
+
+  # ── the MoM writer ─────────────────────────────────────────────────────────
+  # Vendored UNMODIFIED from the MoM project's llama-service: same prompts, same JSON
+  # validation and repair passes. Nothing in that service was rewritten for this stack —
+  # it is pinned to the local vLLM by environment instead.
+  llama-service:
+    build:
+      context: ./llama-service
+      dockerfile: Dockerfile
+    image: offline-mom-llama:latest
+    container_name: offline-mom-llama
+    runtime: runc                # CPU only — all the GPU work happens inside vLLM
+    depends_on:
+      vllm:
+        condition: service_healthy
+    environment:
+      # THE OFFLINE PIN. llama-service/config.py decides cloud-vs-local purely from this
+      # URL — there is no separate engine switch. Left unset it defaults to Groq, so this
+      # line is what makes the service offline, and `mode` in its /health reflects it.
+      - VLLM_API_BASE=http://vllm:8004/v1
+      - LLM_MODEL_PATH=gpt-oss-120b    # must match --served-model-name above
+      - APP_MODE=offline
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+    volumes:
+      # Full English dictionary for the term-corrector's over-correction guard. Without it
+      # the guard falls back to a 293-word list and starts rewriting ordinary words into
+      # product names ("coherent" → "Qdrant"). The image installs `wamerican` for this, so
+      # the mount is belt-and-braces on a host that has it.
+      - /usr/share/dict/american-english:/usr/share/dict/words:ro
+    ports:
+      - "8001:8001"              # host-side health checks / debugging
+    restart: unless-stopped
+    healthcheck:
+      # Probe "/" (a static local route), NOT "/health" — /health round-trips to the LLM.
+      # Container liveness = "is uvicorn serving".
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/',timeout=5).status==200 else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  # ── speaker diarization ────────────────────────────────────────────────────
+  # NeMo TitaNet — labels each turn with who spoke, so the MoM writer can attribute
+  # points to the right person. Vendored UNMODIFIED from the MoM project's nemo-service.
+  #
+  # WHY IT IS BACK: an earlier revision dropped it, betting that the LLM could resolve
+  # speakers from self-introductions in the text. That held on a scripted standup and
+  # FAILED on a real 25-minute two-person conversation — the model invented a third
+  # participant, returned an empty attendee list, and swapped two people's routines.
+  # Names said once at minute one do not survive 24 minutes of back-and-forth.
+  nemo-service:
+    build:
+      context: ./nemo-service
+      dockerfile: Dockerfile
+    image: offline-mom-nemo:latest
+    container_name: offline-mom-nemo
+    # GPU. The shared MoM compose file pins this to CPU because its cloud target has no
+    # GPU, and on CPU diarization runs ~2 HOURS per 24-minute meeting vs ~70 seconds here.
+    # That difference is what makes the feature usable rather than theoretical.
+    runtime: nvidia
+    # STARTUP ORDER IS LOAD-BEARING, not cosmetic. vLLM sizes its KV cache from the memory
+    # that is FREE when it starts, so if whisper (~4 GB) and TitaNet are already resident it
+    # fails outright with "No available memory for the cache blocks" — even though the same
+    # three models coexist happily once running. vLLM must claim its share first; the small
+    # models then fit around it. This costs nothing: vLLM's ~8 min load is the critical path
+    # either way.
+    depends_on:
+      vllm:
+        condition: service_healthy
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - NEMO_CACHE_DIR=/root/.cache/nemo
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      # NOTE: no QDRANT_URL, and that is the point. Qdrant backs ENROLLED speaker profiles
+      # (voice biometrics matched to real names) — the meeting-management feature this
+      # service dropped. transcribe-api calls /diarize with identify=false, so no enrolled
+      # lookup happens, no vector DB is needed, and no voiceprints are ever stored.
+      # nemo-service logs a speaker-DB warning at startup and serves /diarize regardless.
+    volumes:
+      # TitaNet + MarbleNet VAD weights (~150 MB). NeMo fetches these lazily on the FIRST
+      # diarization, so an empty volume means that first request needs the internet — which
+      # breaks the offline guarantee at exactly the wrong moment. Seed it once before going
+      # air-gapped:  ./scripts/seed-nemo-cache.sh
+      - nemo-cache:/root/.cache
+    ports:
+      - "8003:8003"                  # host-side health checks / debugging
+    restart: unless-stopped
+    healthcheck:
+      # nemo_loaded flips true only once TitaNet is resident, so this is a real
+      # "model ready" signal rather than "uvicorn is up".
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if b'\"nemo_loaded\":true' in urllib.request.urlopen('http://localhost:8003/health',timeout=5).read() else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 120s
+
+volumes:
+  # Owned by THIS project — no longer the MoM stack's external volume. Seed it with
+  # ./scripts/seed-nemo-cache.sh (copies from an existing cache, or downloads once).
+  nemo-cache:

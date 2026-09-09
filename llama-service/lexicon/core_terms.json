@@ -1,0 +1,57 @@
+{
+  "_comment": "Tier-1 org core vocabulary: product/client names + key stack terms that MUST be exact and that the LLM guesses wrong. Bounded to OUR recurring terms (not the world's jargon). canonical -> known-mishearing aliases. Auto-extendable from repo/docs.",
+  "Apollo Computers": [
+    "polo computer",
+    "a polo computer",
+    "apolo computers",
+    "apollo computer"
+  ],
+  "AngelBot": [
+    "angel bot",
+    "angle bot"
+  ],
+  "Docutalk": [
+    "docu talk",
+    "doctor talk"
+  ],
+  "Costacloud": [
+    "costa cloud",
+    "costco cloud"
+  ],
+  "MoM": [
+    "mom app"
+  ],
+  "Qdrant": [
+    "quadrant",
+    "quadrent"
+  ],
+  "vLLM": [
+    "bll",
+    "vllm",
+    "blm"
+  ],
+  "NeMo": [
+    "devo",
+    "nimo",
+    "neemo"
+  ],
+  "Whisper": [
+    "vsperge",
+    "whistler",
+    "wisper"
+  ],
+  "diarization": [
+    "dialization",
+    "diahization",
+    "dialisation",
+    "diarisation"
+  ],
+  "TitaNet": [
+    "titan net"
+  ],
+  "Chatterbox": [
+    "chatter box"
+  ],
+  "Dash Computers": [],
+  "embeddings": []
+}

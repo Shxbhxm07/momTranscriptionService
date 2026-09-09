@@ -1,0 +1,30 @@
+{
+  "_comment": "Termbase for MoM translation. Edit WITHOUT code changes. 'dnt' = keep verbatim in every language (brands, products, acronyms, agile/devops loanwords). 'terms' = approved per-language translations (a term here is forced to exactly that string for that language; languages omitted fall back to the source). Enforced deterministically via mask->translate->restore. NON-ENGLISH STRINGS BELOW ARE A FIRST PASS — MUST be reviewed by a native speaker before shipping each language.",
+  "dnt": [
+    "GPU", "CPU", "TPU", "API", "SDK", "CLI", "DevOps", "MLOps", "Docker", "Kubernetes", "K8s",
+    "Backend", "Frontend", "Middleware",
+    "Neo4j", "Elasticsearch", "GraphRAG", "LangChain", "LlamaIndex", "Groq", "BM25", "PostgreSQL", "Postgres",
+    "MySQL", "MongoDB", "Redis", "Kafka", "AWS", "GCP", "Azure", "LLM", "RAG", "JSON", "HTTP",
+    "HTTPS", "REST", "gRPC", "SQL", "NoSQL", "OAuth", "JWT", "SSO", "Python", "JavaScript",
+    "TypeScript", "PyTorch", "TensorFlow", "CUDA", "AngelBot.AI", "key-pool",
+    "Sprint", "Scrum", "Kanban", "CI/CD", "SLA", "KPI", "OKR", "MVP", "QA", "UAT", "PoC",
+    "SaaS", "PaaS", "Terraform", "Ansible", "Jenkins", "GitHub", "GitLab", "Jira", "Nginx",
+    "Grafana", "Prometheus", "Webhook", "vLLM", "Whisper", "NeMo", "Qdrant", "FastAPI", "Uvicorn"
+  ],
+  "terms": {
+    "embeddings": {
+      "Hindi": "एम्बेडिंग",
+      "Chinese (Simplified)": "嵌入",
+      "Russian": "эмбеддинги",
+      "Hebrew": "הטמעות",
+      "Arabic": "تضمينات"
+    },
+    "rollout": {
+      "Hindi": "रोलआउट",
+      "Chinese (Simplified)": "部署",
+      "Russian": "развёртывание",
+      "Hebrew": "פריסה",
+      "Arabic": "نشر"
+    }
+  }
+}

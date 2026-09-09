@@ -1,0 +1,1685 @@
+0:00
+0 seconds
+okay all right good to go you want to lead us off John I think you have the
+0:07
+7 seconds
+first item yeah thanks dad so hey welcome everybody would like to give me cold warm welcome Nico is joining us today as a new front-end
+0:15
+15 seconds
+engineer on the package team we're very excited to have you Nico Nico I know you just did this but would you mind just giving us a real quick snippet about
+0:23
+23 seconds
+yourself another fellow so I'm Nico my name is Nicola but Nick was perfect for everybody
+0:32
+32 seconds
+before he flamboyance I was working in pull ups so I guess lava sticks with me I'm really in love with you Jas and I
+0:41
+41 seconds
+maintain some open source packages and I'm really excited start Mika we are super excited you're here thank you for
+0:49
+49 seconds
+that and welcome awesome thanks Dan over to you welcome to Nico it's it's great
+0:55
+55 seconds
+to have you on the team and I next item was issue herda for doing async issues weight estimates so we've been walking
+1:03
+1 minute, 3 seconds
+through you know adding to our very lightweight process as we need to add it as we've seen gaps the plan is to sort
+1:11
+1 minute, 11 seconds
+of do it as little effort as we can and then just start working on things and as we see gaps we're going to start adding you know processes if if we feel like
+1:18
+1 minute, 18 seconds
+they're necessary I recently we agreed to do sort of t-shirt sizing on all the issues that was going to happen the day before the
+1:25
+1 minute, 25 seconds
+17th to the 16th then we're going to finalize what's deliverable on the 17th before we actually kick off work on the
+1:32
+1 minute, 32 seconds
+18th of our new milestones I would like to see everyone's feedback and I see people have already commented in the
+1:42
+1 minute, 42 seconds
+agenda but I think what we want to do is to decide if we feel like this is helpful happy to wait for the next milestone to see if people are like
+1:50
+1 minute, 50 seconds
+really concerned about the way we decided to already do the light weight issue waiting effort that we have I
+1:58
+1 minute, 58 seconds
+prefer to iterate on things and not just add a whole bunch of process unless there's a clear reason why we're adding it and that's kind of why I'm sort of saying how you go take a look at this
+2:06
+2 minutes, 6 seconds
+tool John's used it so John can answer questions better than I can with the issue header and so
+2:13
+2 minutes, 13 seconds
+yeah just flag that Reverend go take a look at that tool if you don't have access Darby or myself I have to reach
+2:20
+2 minutes, 20 seconds
+out to Darby people thank you too cool I think you have the next item as well and
+2:29
+2 minutes, 29 seconds
+if people want to discuss that further just sort of issue her to further just to get up John and package channel did
+2:37
+2 minutes, 37 seconds
+he said he'd do a demo for us yeah the next item John yeah thanks Dan yeah please please reach out for issue heard her might can give you a
+2:45
+2 minutes, 45 seconds
+walkthrough how why we built it what it does all that good stuff next point is just a silly truck or a silly point
+2:52
+2 minutes, 52 seconds
+we're saying hi to chuck chuck is a good friend who's been sometimes follows our meetings on YouTube so I check my check
+3:02
+3 minutes, 2 seconds
+over to Steve thanks everybody yeah I was just thinking or last week to realize that this might be like savings
+3:11
+3 minutes, 11 seconds
+coming up and realize that maybe not all of ours line up so thought I'd be maybe a good idea to know when that might
+3:19
+3 minutes, 19 seconds
+happen for some people and whether or not that affects any of these meeting times in any particular way but it looks
+3:27
+3 minutes, 27 seconds
+like some people have started to just post their dates and just something to keep in mind those we kind of reached the end of October and a month or so
+3:36
+3 minutes, 36 seconds
+cool yeah it's good cool that state thanks to that nice job I will add mine
+3:43
+3 minutes, 43 seconds
+as well people want to go through and add that to the agenda I mean it will just happen with our meetings and everything in terms of them sliding but
+3:52
+3 minutes, 52 seconds
+they won't move automatically so it's a good is a really good point um we do have a sync meetings for a reason so if they turn into a time that doesn't work
+4:00
+4 minutes
+the people then we should be able to attend as best as we can with the meeting notes and then watching the meeting just for anyone they can't make
+4:07
+4 minutes, 7 seconds
+meeting I'm just as the friendly reminder that you should consider that meeting the next day that you're available or working you should consider
+4:16
+4 minutes, 16 seconds
+that a meeting that you watch as your meeting and take that time 30 minutes or whatever it is 25 minutes to sit down
+4:23
+4 minutes, 23 seconds
+and actually review what's in the agenda and then what actually happened on the call just because if you don't you're just going to lose connection with what's happening in the
+4:31
+4 minutes, 31 seconds
+team and that's why we have the async set up so okay and the next item is mine
+4:38
+4 minutes, 38 seconds
+there's a discussion that I linked to here of going around iterating on our infrared dev escalation process to
+4:46
+4 minutes, 46 seconds
+remove the weekend on-call element of that for now there are a lot of if you look through that thread I Tim if you
+4:56
+4 minutes, 56 seconds
+look through that thread you'll find that the initial issue was raised to say hey let's iterate and remove this because there are a bunch of actual
+5:03
+5 minutes, 3 seconds
+legal considerations around people working on weekends in some countries without you know being paid and so there's a lot of considerations to the
+5:11
+5 minutes, 11 seconds
+iteration there being proposes to remove the weekend element of on-call which might make some people feel a little
+5:19
+5 minutes, 19 seconds
+happier because they don't have to be on call and weekends I don't blame people for cooling happier that way so go check
+5:28
+5 minutes, 28 seconds
+that out if you're interested I spend a heap of time on it but there's already a consensus if I'd look at that we may be pulling the weekend on-call
+5:35
+5 minutes, 35 seconds
+out and then we're looking at the the
+5:44
+5 minutes, 44 seconds
+next item I had was the way you moved forward on the community contribution for composer which is the PHP package
+5:53
+5 minutes, 53 seconds
+manager GG's taking a look at that and I did see a massive commit going to that over the weekend so many sermon he
+6:02
+6 minutes, 2 seconds
+commits just like you gmail said so maybe that's going to start moving I'm following that mr so that I can get notifications when stuff happens on it
+6:09
+6 minutes, 9 seconds
+because I really would love to see that move move forward because you know when the community spends time contributing it's obviously important that we we
+6:17
+6 minutes, 17 seconds
+support them as best as we can so I feel like that one's pretty well answered so far and on to you axel yeah thanks so
+6:27
+6 minutes, 27 seconds
+whether you put that together with requests about improving my navigation of the pockets features so right now they are all under one roof because
+6:36
+6 minutes, 36 seconds
+before they were scheduled a place so I think this is gonna improve things has
+6:43
+6 minutes, 43 seconds
+been suggested and I think this year will be a magic question I'll review up if you want to take it out and leave
+6:51
+6 minutes, 51 seconds
+something buckling on so yeah that's it for me that's great thank you very much for that Axl and
+6:58
+6 minutes, 58 seconds
+welcome to you I think the first meeting you've been to yep hey it's nice to have
+7:05
+7 minutes, 5 seconds
+you here welcome yeah and then I have the last thing there is a back-end
+7:13
+7 minutes, 13 seconds
+weekly cold it goes on it's tomorrow morning my time which is UTC minus seven if you look at the team meetings you'll
+7:21
+7 minutes, 21 seconds
+actually be able to find that and this is mostly for you Steve and Gigi as GG's
+7:28
+7 minutes, 28 seconds
+watching this hi Gigi just go check that meeting out it's worth going to Tim Zalman raised this
+7:38
+7 minutes, 38 seconds
+with me that we should be thinking about investing in that and they're going to start broadening the scope of it hopefully to perhaps be maybe something
+7:45
+7 minutes, 45 seconds
+that's like here's some tips and tricks here's how this works it's like that type of like environment set up for that so I definitely go check that I'm probably gonna go to a few of
+7:53
+7 minutes, 53 seconds
+those if I can as well just to sort of see how it flows but it's something that we don't have a lot of clear coms about across the orb so just flagging that for
+8:02
+8 minutes, 2 seconds
+people if you can't find it oh I will let's let's chat in package there's a
+8:09
+8 minutes, 9 seconds
+there's also a link in the description of the back ends channel there's a link for the back end call which includes the
+8:18
+8 minutes, 18 seconds
+agenda document okay have you been going to that mm-hmm nice and and how is that
+8:25
+8 minutes, 25 seconds
+something that you find helpful so far yeah I mean it's very back and forth like some weeks it doesn't even really
+8:32
+8 minutes, 32 seconds
+happen because nobody puts anything on the agenda and then other weeks a few people will show up and read from some
+8:39
+8 minutes, 39 seconds
+other people's notes but it's I like it just to you know get a little face time with some people in other areas
+8:46
+8 minutes, 46 seconds
+nice yeah so I would say that it sounds like as an old way and trying to invest a little bit more in that meeting so maybe you have a think about
+8:55
+8 minutes, 55 seconds
+what you think could be really useful there and there's a suggestion of like I said tips and tricks and one only even making it somewhat of a social thing if
+9:04
+9 minutes, 4 seconds
+there wasn't any tips and tricks I think there's problems with scaling once you get the tipping points once you go through scaling of social things where
+9:12
+9 minutes, 12 seconds
+it gets to like ten people in it there's just too many people for anyone to really feel like they're getting social value out of something I think
+9:20
+9 minutes, 20 seconds
+but that's something definitely worth looking at thank you for that and maybe think about any other items you want to suggest for that like in that realm of
+9:29
+9 minutes, 29 seconds
+like hey how should this work you know maybe there's ideas of like here's a cool mr here's an issue here is our resolve this whatever ideas you think if
+9:36
+9 minutes, 36 seconds
+you use oh and maybe put them forward in the back in channel I don't have to be the conduit for that cool questions for
+9:47
+9 minutes, 47 seconds
+anyone that's the end of our items in our agenda does anyone have anything
+9:51
+9 minutes, 51 seconds
+else they want a raise or quote amount
+10:00
+10 minutes
+of silence yes all add something for the we have a front-end weekly call as well
+10:07
+10 minutes, 7 seconds
+and Dan it is hard to kind of scale in that social level so one thing we've been doing recently is every month we'll
+10:15
+10 minutes, 15 seconds
+do a front-end themed call where it gives everybody an opportunity to like like someone will pick like what's your favorite movie what's your favorite book and everybody lists that stuff out and
+10:23
+10 minutes, 23 seconds
+then everybody votes and chooses a winner and then the winner picks the next the next theme for next month so
+10:30
+10 minutes, 30 seconds
+it's been kind of a fun way to to have some social interaction on a larger scale so just want to throw that out there is there's an idea yeah Tim
+10:39
+10 minutes, 39 seconds
+mention that to me as well yeah I mean I'm I'm not trying to set what people do
+10:47
+10 minutes, 47 seconds
+in there and what people find interesting out of those calls but I think that's a good suggestion Tim said that we there's there's probably going
+10:56
+10 minutes, 56 seconds
+to be an effort maybe in a couple of weeks to get a few you engineering managers together the sort of he'll start seeding what's in the back end Cole just because it sounds like the
+11:03
+11 minutes, 3 seconds
+backing call isn't as sort of a mature mature a process or a interaction as the frontend call is so there might be some
+11:11
+11 minutes, 11 seconds
+effort getting put towards that here in a couple of weeks soon yeah I think the
+11:18
+11 minutes, 18 seconds
+other update I guess is that we may be increasing our hiring generally across
+11:25
+11 minutes, 25 seconds
+gitlab in q4 that was a little flag which it may not impact the package team beyond what we already are but there
+11:34
+11 minutes, 34 seconds
+might be extra peeps at a higher rate of peeps coming on board so if it wasn't
+11:41
+11 minutes, 41 seconds
+already a lot of peeps already so cool anything else anyone wants to discuss
+11:48
+11 minutes, 48 seconds
+today and awkward silence yes all right
+11:56
+11 minutes, 56 seconds
+I think that's good to wrap up and I think just wanted to say thank you so much for everyone joining us and Axel lovely to see you and thank you so much
+12:04
+12 minutes, 4 seconds
+for your hard work and hope everyone has a good rest of however much as rest of their day who is
+12:12
+12 minutes, 12 seconds
+left of their day today thanks everybody thank you
+
+
+------------------------------------------------------------------------
+
+2:29
+2 minutes, 29 seconds
+that's great. If anybody needs additional ones or if something got missed for some reason, please let Ally
+2:37
+2 minutes, 37 seconds
+know and we can get those um shipped out. Regarding the I speak guides, I I did not send those yet to culp.
+2:47
+2 minutes, 47 seconds
+Honestly, I wanted them to focus on the flag things. I didn't want to um overload them with both projects at the same time. Um so, now that we're done
+2:55
+2 minutes, 55 seconds
+with that, I think they have a little bit of things that they do. um in in January that there's kind of a crunch
+3:02
+3 minutes, 2 seconds
+with um so probably in February or so we'll send that information out to CULP to get those printed and sent out to everybody.
+3:12
+3 minutes, 12 seconds
+Great.
+3:15
+3 minutes, 15 seconds
+Does anybody have any questions about the the guides?
+3:22
+3 minutes, 22 seconds
+Good. All right. Well, moving along. Uh how about the telephonic bilingual services?
+3:28
+3 minutes, 28 seconds
+Sure. Uh at last meeting we mentioned that we will be going out to bid for our
+3:34
+3 minutes, 34 seconds
+telephonic bilingual services. These are the interpretations that are done over
+3:41
+3 minutes, 41 seconds
+the phone generally for clerk's offices, uh support enforcement meetings, court
+3:48
+3 minutes, 48 seconds
+service centers, probation, family meetings, um the all of those outofthecore events. Um, so we did go
+3:56
+3 minutes, 56 seconds
+out to bid for that. Um, we have a meeting with purchasing on Monday regarding it. Um, so we should have more
+4:05
+4 minutes, 5 seconds
+information at our next meeting. Um, in the event new vendors are brought on
+4:13
+4 minutes, 13 seconds
+board, we will have to develop training materials and then train everybody in
+4:20
+4 minutes, 20 seconds
+the branch on it. um how we did it last time in 2020. Um Alli's office
+4:27
+4 minutes, 27 seconds
+physically went out to every office in the judicial branch um to provide the training materials to update the phones
+4:36
+4 minutes, 36 seconds
+um and I anticipate we'll be doing that this way again. So it's while it's time consuming, it seems to be the most
+4:44
+4 minutes, 44 seconds
+effective way of getting the information out there.
+4:49
+4 minutes, 49 seconds
+Um, so once we have that information on how what direction we're actually going to go, we'll let everybody know. Um, and
+4:56
+4 minutes, 56 seconds
+then we'll we'll start working on that training program and materials to get everything out and up and running as soon as possible.
+5:09
+5 minutes, 9 seconds
+Any questions?
+5:12
+5 minutes, 12 seconds
+All right. Well, good. Now, let's move on to the 2026 initiatives. And here I I need to apologize because I should have really just touched base with Rich
+5:20
+5 minutes, 20 seconds
+before today's meeting um to see if we have any initiatives to um consider. Uh
+5:28
+5 minutes, 28 seconds
+and I didn't do that. So um Rich, I'll put you on the hot spot here and I'll ask if you have any uh any um
+5:36
+5 minutes, 36 seconds
+initiatives that you would like to see come about this year.
+5:41
+5 minutes, 41 seconds
+Yeah. The one thing that we would like to do and we've talked about it a lot and just timing has never worked out
+5:49
+5 minutes, 49 seconds
+with all with other things is we kind we've gotten a a training for vendors, we've gotten a training for staff, we
+5:57
+5 minutes, 57 seconds
+have a training for judges. Um we don't have anything for the external stakeholders um the public attorneys. So
+6:07
+6 minutes, 7 seconds
+what we would like to do is to come up with an online course that will just tell the services that are offered and
+6:15
+6 minutes, 15 seconds
+how those services can be provided. Um so that's something we would like to work on this year and hopefully get
+6:23
+6 minutes, 23 seconds
+online. Um so that piece of the the external world will will know what what
+6:30
+6 minutes, 30 seconds
+they have available through the branch um when they come in here. Um, so we don't have that. So that's something we
+6:37
+6 minutes, 37 seconds
+would like to work on. Um, I did ask um, Vivven Alley, there's a big um, ADA
+6:46
+6 minutes, 46 seconds
+initiative that's a branchwide initiative that's going on regarding the website um that has a translation
+6:55
+6 minutes, 55 seconds
+component um, that I'll let Viv um, and Ally speak about uh, briefly.
+7:02
+7 minutes, 2 seconds
+Sure. Um the judicial branch is currently in the process of remediating its website and all online content. This
+7:09
+7 minutes, 9 seconds
+includes our branch forms. Uh we want to make sure that they comply with the new federal ADA accessibility standards and the deadline for compliance is this
+7:18
+7 minutes, 18 seconds
+April. So all forms including the foreign language translations have to be remediated. uh we will be working closely with translation services to
+7:27
+7 minutes, 27 seconds
+ensure that the forms um are are comply with uh the official translation because they're going to be they need to add accessible text and tool tips for the
+7:36
+7 minutes, 36 seconds
+visually impaired. Um so we want to make sure that any additional language is that is added to the forms complies with uh is approved by the uh translators.
+7:44
+7 minutes, 44 seconds
+Now most forms are going to be remediated inhouse but we are in the process of securing um a couple of vendors. We have one outside vendor
+7:53
+7 minutes, 53 seconds
+right now, Word Wizard, but we're in the process of getting more because we have hundreds, literally hundreds of forms to uh remediate. So, that that process is ongoing.
+8:03
+8 minutes, 3 seconds
+Yeah, we're just ready to proceed whenever um um everything is ready. Uh we'll just assign interpreters for all the four
+8:11
+8 minutes, 11 seconds
+languages that were translated into to work and uh be able to go through the forms. I think we're going to be provided with um with a license to be
+8:20
+8 minutes, 20 seconds
+able to do the the the the breeding to make sure everything flows correctly, but uh we're just ready whenever everything is ready to go.
+8:29
+8 minutes, 29 seconds
+Yeah, I I'll confirm that you get a common look. That's the that's the software that they've been using. So, I'll make sure you have a license for that as well.
+8:36
+8 minutes, 36 seconds
+Okay.
+8:39
+8 minutes, 39 seconds
+So those judge those are the two main projects in addition to the likelihood that we may be doing a a mass training
+8:46
+8 minutes, 46 seconds
+on the telephonic bilingual services this year um if we get a new vendor. So those are kind of the the things that we were looking to focus on in 2026.
+8:56
+8 minutes, 56 seconds
+I think those are really great ideas particularly with the attorneys just because uh I know there are a lot of attorneys who practice in our courts
+9:04
+9 minutes, 4 seconds
+daily like the public defenders and states attorneys and uh people in government work but there are a lot of people in private practice particularly
+9:12
+9 minutes, 12 seconds
+the younger ones who don't really understand or are not may not be aware of um of these services um I think once
+9:20
+9 minutes, 20 seconds
+we educate them they can educate their clients and the public will that um will become educa educated as well. But I
+9:28
+9 minutes, 28 seconds
+think this is a good initiative and I'm glad that you are you're taking it on. Thank you.
+9:35
+9 minutes, 35 seconds
+Okay. Um anybody has anything to add to this initiative program?
+9:44
+9 minutes, 44 seconds
+All right. Good. Well, thank you, Rich.
+9:46
+9 minutes, 46 seconds
+Um everybody Oh, Michelle raised her hand. Michelle had her hand up. Okay. Can you hear me? Yes.
+9:55
+9 minutes, 55 seconds
+Yes.
+9:56
+9 minutes, 56 seconds
+Perfect. Um so I do I do want to echo that I do think it's a great idea to do the um training for external
+10:04
+10 minutes, 4 seconds
+stakeholders because I know that even you know legal services is very aware of language access you know and the
+10:12
+10 minutes, 12 seconds
+importance of it but even they have trouble sometimes understanding you know what services are available in
+10:18
+10 minutes, 18 seconds
+what context. Um, I also wanted to just uh make a note and ask a question about
+10:25
+10 minutes, 25 seconds
+the initiative to um kind of change some of the the forms. And I was uh one of
+10:32
+10 minutes, 32 seconds
+the things that I have noticed for a long time is how complicated it is when
+10:39
+10 minutes, 39 seconds
+you're doing a search for a form. Um I don't know if you guys have ever done that. Um but you know we use obviously
+10:46
+10 minutes, 46 seconds
+we use the forms all the time and um it's kind of I could probably explain more you know if I if I shared my screen
+10:55
+10 minutes, 55 seconds
+um later on with someone but um if someone could also just look at what comes up when the search function is
+11:03
+11 minutes, 3 seconds
+used because I think that that makes it really hard I mean it's hard for me even to find the form and I can't imagine that it's it's easy for the public when
+11:11
+11 minutes, 11 seconds
+you're just searching for for something like that and you don't always know under which category it's going to be, especially if you're not an attorney.
+11:21
+11 minutes, 21 seconds
+No, thank you, Michelle. We could definitely talk to our forms person regarding regarding that. We have one
+11:28
+11 minutes, 28 seconds
+individual who oversees forms. Um, he used to be in legal services. I know he's now in court operations. So, I'll
+11:36
+11 minutes, 36 seconds
+figure out the best avenue of doing that, but we can definitely do that.
+11:41
+11 minutes, 41 seconds
+Thank you so much. And I think part of it is also just that the search function when it comes up with the results, it
+11:48
+11 minutes, 48 seconds
+will it makes a new category for each thing. So it'll say under family forms, it'll have a couple of things under and
+11:55
+11 minutes, 55 seconds
+I think if it came up as just one list, it might be e just that would be easier to navigate. But anyway, thank you so much.
+12:03
+12 minutes, 3 seconds
+Oh, thank you. Yeah, thank you. Any other comments about um this initiative?
+12:11
+12 minutes, 11 seconds
+Great. All right. Does anybody have any other business that we should address?
+12:19
+12 minutes, 19 seconds
+All right. Well, um, so I think last year we mentioned, uh, we set forth,
+12:27
+12 minutes, 27 seconds
+[snorts] um, quarterly meetings if I remember correctly. Uh, I don't know if you, um, wish to approach the the
+12:35
+12 minutes, 35 seconds
+meetings in the same way or do you want to just play by ear? I thought it was kind of nice to have at least uh some uh benchmark as to when we would meet next.
+12:44
+12 minutes, 44 seconds
+Um if you all thought it was a good idea, let's just do it again this year and just pick quarterly dates.
+12:52
+12 minutes, 52 seconds
+Um all right. Yeah, I think that's a good idea, Judge.
+12:56
+12 minutes, 56 seconds
+All right. Tori's got the thumbs up, so that's got to be good. So, today is January 28th. Um,
+13:08
+13 minutes, 8 seconds
+you know, maybe we should meet in May. That works for me.
+13:17
+13 minutes, 17 seconds
+Does Does anybody prefer it a date uh certain date or a day or and a time?
+13:28
+13 minutes, 28 seconds
+I'm It could be after May 6. That would be ideal. Sure. Oh, yeah. Right. Of course.
+13:37
+13 minutes, 37 seconds
+And probably for Rich, too. Poor Rich. Yeah. We'll be a little busy.
+13:41
+13 minutes, 41 seconds
+Yeah. Let's just, you know, let's just plan at the end of the month. Let's just say the 28th, which will be for That's a Thursday.
+13:49
+13 minutes, 49 seconds
+Okay.
+13:49
+13 minutes, 49 seconds
+Um I think I heard somebody say the afternoon is better.
+13:55
+13 minutes, 55 seconds
+Should we do is is Wednesday. Okay. I I may be in a out of state training.
+14:02
+14 minutes, 2 seconds
+Okay. on on Thursday and Friday.
+14:05
+14 minutes, 5 seconds
+All right. So, let's do the 27th. Um, you know, is 3 o'clock good for
+14:14
+14 minutes, 14 seconds
+everybody or Yes.
+14:16
+14 minutes, 16 seconds
+All right. So, thank you. I appreciate that.
+14:19
+14 minutes, 19 seconds
+Yeah. Yeah. So on May 27th um
+14:30
+14 minutes, 30 seconds
+to September so the next one will be in September I think
+14:37
+14 minutes, 37 seconds
+um our last meeting was September 22nd last year that's Tuesday.
+14:44
+14 minutes, 44 seconds
+Is that a good date?
+14:47
+14 minutes, 47 seconds
+That's fine for me. I have I have a conflict. I have a training conflict on that day. Um on Tuesday, I can do Wednesday again.
+14:56
+14 minutes, 56 seconds
+Sure.
+14:56
+14 minutes, 56 seconds
+Sorry. Quick switch pushing to Wednesday, but you do a lot of training. So, how about September 23rd? [laughter] We'll do it at at 3:00. Is that good?
+15:06
+15 minutes, 6 seconds
+Sounds good. Thank you again.
+15:10
+15 minutes, 10 seconds
+So, sure. Um you know, but that brings us to January.
+15:15
+15 minutes, 15 seconds
+Um, should we just hold off and just keep these three dates for now?
+15:20
+15 minutes, 20 seconds
+Yeah, I think that works. All right.
+15:22
+15 minutes, 22 seconds
+I'm I'm sorry. Can I confirm? I I have two dates. Do we have three dates down? I have May and September. Correct.
+15:30
+15 minutes, 30 seconds
+The next one will be January, late December, early January. Yeah.
+15:36
+15 minutes, 36 seconds
+If you want to schedule it now, it's fine. But why don't [clears throat] we hold off? That sounds good.
+15:43
+15 minutes, 43 seconds
+Yeah. So, so it'll be May 28th at 3 and then we'll meet another one uh have another one in September 23rd, I think it was.
+15:52
+15 minutes, 52 seconds
+I think it was May 27th. I think it was May 27th. Yeah. Wednesday, May 27th.
+16:00
+16 minutes
+Okay, let me double check. I think Troy May 27th. Yep.
+16:04
+16 minutes, 4 seconds
+Yeah, it's all my fault, your honor.
+16:07
+16 minutes, 7 seconds
+Yes, that's right. It's all the training that [laughter] you need.
+16:11
+16 minutes, 11 seconds
+Okay. So, that that's good. Uh Rich, I'll I'll probably touch base with you before our next meeting to see where we are in the initiative. And um you know,
+16:19
+16 minutes, 19 seconds
+I'll touch base with you uh beforehand uh if there is a new class of judges. I
+16:25
+16 minutes, 25 seconds
+like to um um be a part of that training or well, at least the conversation with the new judges about it because I do
+16:33
+16 minutes, 33 seconds
+think it's great.
+16:34
+16 minutes, 34 seconds
+Yeah. because I think it's very important uh for new judges and new new hires generally but um it's a great thing.
+16:43
+16 minutes, 43 seconds
+Perfect. All right. Anything else?
+16:47
+16 minutes, 47 seconds
+Wow. Well, it's a very quick meeting. Uh thank you all for your help. Um and then we'll see you May 27th.
+16:57
+16 minutes, 57 seconds
+Terrific. Thank you. Happy New Year everyone. Take care.
+
+
+
+-----------------------------------------------------------------------
+
+
+Search transcript
+0:03
+3 seconds
+here Eric morett here Robert P here Barbara wall
+0:11
+11 seconds
+here Al Silverstein here um I need an approval of the February 17 2022 meeting
+0:19
+19 seconds
+minutes as presented I'll move Eric second I'll
+0:27
+27 seconds
+second Barbara second all those in favor signify by saying I I pose same
+0:34
+34 seconds
+sign okay executive director's report Mr Kelly thank you Mr chair uh good afternoon everybody and glad to be back
+0:43
+43 seconds
+together we've been two months two months since we've been together uh so over the last two months I'm giving you a total cumulative um report for the
+0:51
+51 seconds
+last two months since we've last met we had 14 different incidents of alcohol and tobacco related events of the within
+0:59
+59 seconds
+that 16 people have been charged and we've made quite a few seizures in the area of other tobacco products sticks
+1:06
+1 minute, 6 seconds
+we're close to 62,000 that were seized uh with unstamped cigarette packs just under
+1:13
+1 minute, 13 seconds
+5,000 nearly 400 containers of distilled Spirits were seized 52 containers of
+1:20
+1 minute, 20 seconds
+beer 837 containers of wine uh these incidents have resulted from really across the state I'm just going to read off a few of the counties to give you a
+1:28
+1 minute, 28 seconds
+sense of it Carol Frederick Harford County alany Cecil Prince George's Baltimore County Baltimore city and
+1:37
+1 minute, 37 seconds
+Washington County so you can see these these incidents take place across the entire State uh also this is renewal time for
+1:45
+1 minute, 45 seconds
+us it is for the local boards just to give you a flavor of this again we issue licenses to the first two tiers the manufacturers and the suppliers and all
+1:52
+1 minute, 52 seconds
+the local boards across the State issue licenses to the retailers so this is the time period for the retailers to issue their licenses across state it's a very
+2:01
+2 minutes, 1 second
+busy time for the local boards rather to issue these and they do somewhere close to 8,000 licenses so it's quite a bit
+2:08
+2 minutes, 8 seconds
+and we do uh our licenses as well for our manufacturers and our and our wholesalers just those two elements that possess our licenses and we issue about
+2:17
+2 minutes, 17 seconds
+700 of those uh they all expire April 30th to be renewed for May 1st so we're well underway for the renewal we have
+2:24
+2 minutes, 24 seconds
+quite a few that have already filed their renewal paperwork will be issuing their certificates next week uh printing these out next Monday if everything goes
+2:32
+2 minutes, 32 seconds
+well and having them out by probably Tuesday or Wednesday in the mail I'm going to get back to that in just a minute because I do want to make another comment on it uh we put out three
+2:41
+2 minutes, 41 seconds
+training and information advisories since we last met uh one of them was about the instructions for the renewal
+2:49
+2 minutes, 49 seconds
+for these these these coupons the these um licenses that we issue that we're put out right now we we've been having we found that
+2:56
+2 minutes, 56 seconds
+we had to put out these advisories each month or so before we actually send at to Renewal coupons now years ago to renew you had to fill out a long
+3:03
+3 minutes, 3 seconds
+four-page form to renew and commissioner Buck can tell you all about that it was kind of a pain you had to fill in a lot of boxes it was the same thing every
+3:11
+3 minutes, 11 seconds
+year so we really shortened this up now it's a coupon at the bottom of a piece of a you know it's like about a quarter of an eight and a half by 11 sheet of
+3:19
+3 minutes, 19 seconds
+piece of paper that you have to fill out you have to put four things on there you have to put out we already know what license you want you have to put out how much money you're going to send us
+3:27
+3 minutes, 27 seconds
+that's in one box you have to check another box to tell us if you're a caterer if you're not a caterer you don't need to check it it's very explicit if you check it you're a
+3:35
+3 minutes, 35 seconds
+caterer the fourth the third box is the signature of the ly or an office holder of the business that's the third thing
+3:43
+3 minutes, 43 seconds
+and the fourth thing is the signature of the property owner those are four things that are required that's all out of the
+3:49
+3 minutes, 49 seconds
+700 renewals uh that we got that we sent out and we received uh back 400 of them were missing at least one of those items
+3:58
+3 minutes, 58 seconds
+now when we send out these advisers we send them out saying we've done this now this is our third time this is our third goor round here's what we're seeing as
+4:06
+4 minutes, 6 seconds
+errors please don't clip the coupon off of The Advisory that we're giving you and send that in we send you a personalized advisory in a mail uh we
+4:13
+4 minutes, 13 seconds
+give them we give them very explicit instructions that are only four steps make sure you've done the following and still 57% of them are not correct so
+4:21
+4 minutes, 21 seconds
+here are our options last year we fixed everything this year we're fixing it again against my better judgement really
+4:30
+4 minutes, 30 seconds
+we're fixing them again because it's just faster for our team to fix the 400 errors than it is to let people really
+4:38
+4 minutes, 38 seconds
+just not be renewed and have 400 license holders not have licenses which is tempting but it's probably not realistic so we're we're
+4:47
+4 minutes, 47 seconds
+fixing all of those we'll have all of those done and completed by uh by the week's end by tomorrow early Monday so that we renew our licenses everybody to
+4:54
+4 minutes, 54 seconds
+be up to date but it's a real problem and and again it's such a simple process now and and it's it's kind of a mading
+5:01
+5 minutes, 1 second
+problem so that is why we waste some of our advisories that we do each year to give these very explicit instructions so I say that because you're going to hear
+5:09
+5 minutes, 9 seconds
+me mention these a couple of times throughout the year so that was one of them we issued a an instruction sheet saying please work really hard to try and get this right the second one was
+5:17
+5 minutes, 17 seconds
+about to really emphasizing to Tobacco retailers a lot of violation increases as I mentioned we know we're 6 I say 60
+5:25
+5 minutes, 25 seconds
+almost 62,000 uh sticks of OTP other tobacco products that's a lot and we're seeing a lot of that we're seeing more
+5:32
+5 minutes, 32 seconds
+loose cigarette sales we're seeing more unstamped cigarette sales through these just through our regular retailers and businesses in the state so the second one we address directly to these
+5:41
+5 minutes, 41 seconds
+retailers and said hey look here's the rules here's where you get your tobacco from you have to buy cigarettes from this entity and here's what they have to look like and they got to have the stamp
+5:48
+5 minutes, 48 seconds
+on it you have to buy other tobacco products from these entities they're the only ones allowed to sell in Maryland and never may you ever open up a pack of cigarettes and sell cigarettes
+5:56
+5 minutes, 56 seconds
+individually you may not we're seeing a lot of it and we're charging for it and so we were kind of putting people on notice that uh we're we're not
+6:04
+6 minutes, 4 seconds
+lightening up on the enforcement side so please do your best to tighten up then our third uh d uh advisor that was put
+6:12
+6 minutes, 12 seconds
+out was another reminder of how to F these coupons to our direct wine shippers this is these are people who have permits from outside a few inside
+6:20
+6 minutes, 20 seconds
+of the state and mostly outside of the state to sell wine directly from their Wineries and there are there are several conditions that exist in order to be a
+6:28
+6 minutes, 28 seconds
+direct wine shipper if you meet those conditions then you're allowed to ship directly to a consumer in our state and we probably have somewhere around 1,200
+6:36
+6 minutes, 36 seconds
+of these that um are across the country so we're getting those expire on June 30th renewal on July 1st we've sent out
+6:44
+6 minutes, 44 seconds
+an advisory just recently to let them know you're about to get this coupon please pay attention to the just a couple of areas you have to fill out pay
+6:51
+6 minutes, 51 seconds
+a lot of attention if you don't you will delay you know you may be you will you will probably expire you will be delayed in getting a new one and really just
+6:59
+6 minutes, 59 seconds
+kind of putting them on alert making them be um responsible for for this for themselves so that's the advisories uh
+7:08
+7 minutes, 8 seconds
+next month we the dust is still settling around the general assembly's work this year and the governor's decisions on what he's going to do with many of the bills next month we'll have a very
+7:17
+7 minutes, 17 seconds
+detailed presentation on what bills passed which ones were kind of significant and maybe didn't pass we'll answer any questions you have uh so
+7:25
+7 minutes, 25 seconds
+we'll put together a a fairly decent presentation for you for that for next month but in the me time a couple of things that were interesting for us past one we had our our two budget hearings
+7:33
+7 minutes, 33 seconds
+and our budget Bill and uh we really flew through and the chairman was there for both of those hearings and thank you Mr chair for for being present for that
+7:41
+7 minutes, 41 seconds
+makes a big difference you know as he would tell you I think there were very easy hearings for us fortunately this year we'll take that and the question
+7:49
+7 minutes, 49 seconds
+from both committees really the big question for both committees was is that enough money because the governor allocated a decent uh increase for us
+7:58
+7 minutes, 58 seconds
+and uh and it's been well either has been or will be appropriated very soon effective July 1st the long and short of it is it's giving us seven new sworn
+8:06
+8 minutes, 6 seconds
+agent positions which we sorely need and an additional non-sworn non-agent administrative position in the office which again we really need and for those
+8:15
+8 minutes, 15 seconds
+who visited you see how busy a handful of people are doing these licenses keeping up on that so it was great for us for the budget I love the general assembly's questions of is that enough
+8:23
+8 minutes, 23 seconds
+do you need more and I'm excited to go back next year if we if we're able to accomplish even more and say yeah we were wrong we did need some more and we'd like to get that so that went well
+8:32
+8 minutes, 32 seconds
+another bill was House Bill 1253 that was really just a corrective bill but just to give you a sense of it in moving the ATC and all the responsibilities
+8:41
+8 minutes, 41 seconds
+from the comproller to its individual commission independent commission all throughout the tobacco regulations the tobacco laws alcohol regulations
+8:49
+8 minutes, 49 seconds
+alcohols all throughout those it mentions comproller and when the general assembly created us they said essentially we expect the ATC to be the
+8:57
+8 minutes, 57 seconds
+successor agency everywhere we we say the comproller will do something relative to the regulation or enforcement of alcohol and tobacco we mean the
+9:05
+9 minutes, 5 seconds
+ATC and there are tons of places in all the laws and regs that still say comproller so each year we go through and we try to clean it up this house
+9:12
+9 minutes, 12 seconds
+bill 1253 went a long way toward that uh if you care to take a look at it it reads pretty easy but it goes through a
+9:19
+9 minutes, 19 seconds
+variety of areas in the tobacco tax law and in the alcohol tax I'm sorry tobacco law and the alcohol law to just migrate
+9:27
+9 minutes, 27 seconds
+responsibility specifically rly stating the ATC is responsible and and may do a variety of things uh relative to that
+9:36
+9 minutes, 36 seconds
+we've been undergoing a transformation in the comar which are the the code of Maryland regulations the RS that we
+9:44
+9 minutes, 44 seconds
+enact they all live within the house of the contr controller still we are about uh well we're about a month away maybe less from completing the conversion of
+9:52
+9 minutes, 52 seconds
+those Rags from the comproller to us as an independent agency there are really not going to be any subst stantive changes everything that was in
+10:01
+10 minutes, 1 second
+regulation before even though some of it needs to be fixed or modernized or updated it's not going to happen now we're just simply taking the time now to
+10:09
+10 minutes, 9 seconds
+move everything so we don't have to go through a lot of hearings we're just moving identical information over to us once we get it we're going to undergo a
+10:16
+10 minutes, 16 seconds
+a massive reevaluation of our RS and see what needs to be updated of course we'll keep you informed and bring you in on all these as we're moving along but
+10:23
+10 minutes, 23 seconds
+that's the the intent over sometime after truthfully it'll probably be after June or July because it may take that
+10:30
+10 minutes, 30 seconds
+long logistically to move all the rigs under the ATC and the last thing is cannabis we have more to report on that next month
+10:38
+10 minutes, 38 seconds
+as well but uh it was an interesting year House Bill one which sets cannabis up for a referendum to the states I'm sorry to the citizens of the state
+10:47
+10 minutes, 47 seconds
+passed and will be voted on in November and my understanding is it's like in the mid 70s uh polls indicate that the population is supportive of cannabis so
+10:56
+10 minutes, 56 seconds
+there's a good likelihood that that would pass it doesn't do anything except to say do we support this or not generally speaking then another bill was
+11:04
+11 minutes, 4 seconds
+a house bill 837 that bill spent a lot of time going through expungements and uh starting to
+11:12
+11 minutes, 12 seconds
+set up in in a very small way starting to set up some framework for policy about how we'll handle cannabis but it really didn't get into that so much but
+11:20
+11 minutes, 20 seconds
+one of the interesting things in the uncodified section of it and specifically section eight it said if this bill does if House Bill one and the
+11:29
+11 minutes, 29 seconds
+referendum pass then effective I believe it's January 1st 2023 the medical cannabis commission
+11:38
+11 minutes, 38 seconds
+will migrate under the office of the executive director so we're going to have that to deal with if uh if that passes at least elements of the will I'm
+11:46
+11 minutes, 46 seconds
+not really sure how much of it we're going to have to dissect that but next week we'll be meeting with the Cannabis commission uh uh executive leadership
+11:55
+11 minutes, 55 seconds
+and trying to figure out what that really means and what it will look like but it does talk about us sort of absorbing that commission at least elements of it and how we should make
+12:03
+12 minutes, 3 seconds
+that t happen and next month we'll have a bigger presentation on on the uh outcome of the Cannabis legislation as
+12:10
+12 minutes, 10 seconds
+well uh our website uh you know our website's not great but um we're working on it we are in discussions with the
+12:17
+12 minutes, 17 seconds
+State's Department of information Technologies which is called do it and also the com controllers uh uh in uh
+12:25
+12 minutes, 25 seconds
+Tech um information Technologies division uh either of those may be eligible or be be able to do the website for us we're looking at both of them to
+12:33
+12 minutes, 33 seconds
+see what they can offer where we reasonably uh should be expecting to live we still use a lot of the com trollers resources which require us as
+12:40
+12 minutes, 40 seconds
+you all have to have specific types of email addresses through the com trollers Frameworks of uh firewalls and whatnot so we just have to weigh all of that and
+12:49
+12 minutes, 49 seconds
+figure out where we're going but we're making great progress on getting a website that we all want it to be educational informative useful easy to
+12:56
+12 minutes, 56 seconds
+navigate we're working very hard on that and Mr chair that is uh that's it for my report I would just add this uh the
+13:05
+13 minutes, 5 seconds
+chair was able to stop by a while back and we were able to get a photograph of him and an ID card issued to him if any of you would like to get that let me
+13:13
+13 minutes, 13 seconds
+know we have to make an appointment for you which is not a big deal but when you if it's convenient for you and you want to do that we'll get you set up for an appointment because that all takes place
+13:20
+13 minutes, 20 seconds
+in another all happens in Annapolis it's very convenient and close it's just in another building with another entity that does it so if you're interested in that let me know we'll get you set up
+13:28
+13 minutes, 28 seconds
+for a photograph and get you your ID cards issued as well that's it Mr
+13:35
+13 minutes, 35 seconds
+chair you're muted you're on mute sir
+13:43
+13 minutes, 43 seconds
+oh you're on mute you're still muted I was going to say the advantage
+13:53
+13 minutes, 53 seconds
+of that is going through security and it expedites that process and so I'd encourage you to do
+14:06
+14 minutes, 6 seconds
+that okay do we have any new business can you hear me we can hear you
+14:13
+14 minutes, 13 seconds
+oh okay no new business scared me for a minute there uh do we have any other new business at this
+14:21
+14 minutes, 21 seconds
+time okay if not I take a motion for adjournment I'll I'll move second Moret
+14:29
+14 minutes, 29 seconds
+and second by Miss Buck uh all those in favor signify by saying I I I post same
+14:37
+14 minutes, 37 seconds
+sign want to thank everybody who has uh sat in on the meeting and uh you know if anybody wants to participate has any
+14:46
+14 minutes, 46 seconds
+information that's germine please get with Mr Kelly for the next agenda thank you all very much we'll see you next
+14:52
+14 minutes, 52 seconds
+month thank you thanks guys thank you
+Sync to video time
+
+
+
+
+-----------------------------------------------------------------------
+
+
+Search transcript
+0:06
+6 seconds
+All right, let's get started. I'd like to call to order the special meeting of the Superior Town Council for Wednesday, November 19th, 2025.
+0:20
+20 seconds
+We have a roll call, please.
+0:27
+27 seconds
+Uh, Mayor Mark Lasis here.
+0:30
+30 seconds
+Mayor Prom Jason Serbu here.
+0:33
+33 seconds
+Council member Jen Co K Cowish here. Council member Stephanie Miller.
+0:41
+41 seconds
+Council member Neil Shaw here.
+0:45
+45 seconds
+Council member Mike Foster here.
+0:48
+48 seconds
+Council member Heather Kracraft here. Town Manager Matt Maggley here.
+0:55
+55 seconds
+Town attorney Nicholas Hartman here.
+0:59
+59 seconds
+All right. Up next is uh item 2B, which is approval of the agenda. Any changes to the agenda that anybody like to make?
+1:06
+1 minute, 6 seconds
+Otherwise, I'll entertain a motion to approve. So moved. Got a motion from council member Foster.
+1:15
+1 minute, 15 seconds
+Second from Council Member Shaw. Uh let's do a roll call vote, please.
+1:28
+1 minute, 28 seconds
+There we go. Uh, Mayor Prom Servu, yes.
+1:33
+1 minute, 33 seconds
+Council member Shaw, yes.
+1:36
+1 minute, 36 seconds
+Council member Cowish, yes.
+1:39
+1 minute, 39 seconds
+Council member Kracraft, yes.
+1:42
+1 minute, 42 seconds
+Council member Foster, yes.
+1:45
+1 minute, 45 seconds
+Mayor Lis, yes.
+1:48
+1 minute, 48 seconds
+And we got coun council member Miller's here now too. Sorry I had to pull over.
+1:54
+1 minute, 54 seconds
+Council member Miller here.
+1:57
+1 minute, 57 seconds
+Safety first. Thank you for pulling over. Safety first.
+2:00
+2 minutes
+Um and just for clarification, we were voting on approval of the agenda. Ah, thank you.
+2:08
+2 minutes, 8 seconds
+You're here. Is that a yes? That is a yes.
+2:11
+2 minutes, 11 seconds
+Okay. Figured as much. Okay. Okay, we're on to item number three, which is consideration of a resolution of the town council of the town of Superior approving a toll tolling agreement with the Rock Creek Homeowners Association.
+2:22
+2 minutes, 22 seconds
+Turn it over to Matt or Nick to introduce.
+2:27
+2 minutes, 27 seconds
+Yeah, Nick, uh, I thought you could give them an overview of the agreement and and any anything else you want to add to it.
+2:34
+2 minutes, 34 seconds
+Yeah. Um, first of all, thank you all seven of you it looks like for being here. I really appreciate it. I know this is not your guys' day job. Um, and
+2:41
+2 minutes, 41 seconds
+I appreciate you being here on short notice. That's kind of I guess what happens. And I think the last special meeting we had was in December of last year. So I try not to call him unless I
+2:49
+2 minutes, 49 seconds
+need him. Um, so I appreciate you all being here. And I'll go I'll get right to it so we can get out of here. Um, this agreement came from me from the
+2:56
+2 minutes, 56 seconds
+Rock Creek HOA attorney, San Jerki. Uh we had briefly discussed after our joint work session a few weeks ago, a month
+3:03
+3 minutes, 3 seconds
+ago now, um that they were worried about a statute of limitations um for bringing any claim against the town for the town not doing any more faint fence
+3:12
+3 minutes, 12 seconds
+maintenance. Uh they were worried about this because and I don't want to speak for Stan, but I believe he said something about that was when we sent the notices to stop doing the
+3:20
+3 minutes, 20 seconds
+maintenance. Um it's his statute of limitations to worry about this agreement. So to get into the tolling agreement, um what we're tolling is the
+3:29
+3 minutes, 29 seconds
+statute of limitations basically meaning we are you know we're turning the clock off and then we'll turn it on like the tolling agreement says I think December
+3:36
+3 minutes, 36 seconds
+1 of 2026. So in the interim we'll continue to meet with the Rock Creek HOA board. We'll discuss with them. Um we'll hopefully come to a productive solution.
+3:44
+3 minutes, 44 seconds
+I think the last meeting was really productive and I have high hopes for that. Um so this is just procedural. Uh it's really not doing anything to our
+3:52
+3 minutes, 52 seconds
+claim or their claim. uh except except extending it. Um I have absolutely no
+3:59
+3 minutes, 59 seconds
+issue with it. I um I want to continue the work with them. It seems silly to me the to bring litigation for no other reason other than you feel like you're
+4:07
+4 minutes, 7 seconds
+on a clock that you have to. Um so with that that that's that's literally all this is doing. Um and I'm happy to answer any questions you guys have.
+4:19
+4 minutes, 19 seconds
+This uh tolls it for one year. Is that correct?
+4:22
+4 minutes, 22 seconds
+Yeah, I think the tolling is um I think in there the date the beginning of the tolling date is actually today. Um that was just coincidental. Um it his Stan
+4:31
+4 minutes, 31 seconds
+had put it in there when he sent it to me a week ago or so. Um and I think it ends on December 1st or 2nd of 2026. December 1st, 2026.
+4:40
+4 minutes, 40 seconds
+Yeah.
+4:41
+4 minutes, 41 seconds
+Okay. So, it can either be extended at that point or town council will uh make a decision at that point.
+4:50
+4 minutes, 50 seconds
+We also have the ability to either party has the ability to terminate um the tolling agreement with the 14-day notice.
+4:56
+4 minutes, 56 seconds
+Correct. And that's a good thing to bring up too, Council Member Foster. I mean, this is I mean, obviously, we're going into this good faith, but if
+5:04
+5 minutes, 4 seconds
+things change, it it's not like we are bound to this until December 1st, although obviously, you know, I foresee that we'll work well together and if we
+5:13
+5 minutes, 13 seconds
+need to extend it, we can also do that as well.
+5:17
+5 minutes, 17 seconds
+Okay. Any additional questions from council for staff or for Nick?
+5:29
+5 minutes, 29 seconds
+Nick, I'll just say this is probably the most one of the straightforward agreements
+5:34
+5 minutes, 34 seconds
+[laughter]
+5:34
+5 minutes, 34 seconds
+I've ever been. So Oh, good. I'm happy to hear that. Um, you know, and a lot of credit goes to Mr. Xerki, too. He sent it to me in a in
+5:43
+5 minutes, 43 seconds
+a very fair and balance. I had I made a few amendments, but but really not a whole lot. it was we're both kind of clear on wanting to continue working together.
+5:50
+5 minutes, 50 seconds
+Yeah. I don't I don't feel like there's any vague language that could be a gotcha question, you know, nine months from now. So, I appreciate you both
+5:59
+5 minutes, 59 seconds
+working on this and making it pretty straightforward. Of course.
+6:06
+6 minutes, 6 seconds
+Any additional questions for staff?
+6:11
+6 minutes, 11 seconds
+I'll open it up for public comment. If anybody in the public would like to make public comment on this issue, please use the raise hand feature on Zoom.
+6:25
+6 minutes, 25 seconds
+All right, seeing no hands raised, public comment is closed and uh we can discuss, take an action. I'll I'll just
+6:34
+6 minutes, 34 seconds
+give my two cents. Um tolling agreements are pretty uh customary. um you know they're not um something that is really
+6:42
+6 minutes, 42 seconds
+out of the ordinary in terms of you know parties dealing with statute of limitations issues and um I think for
+6:50
+6 minutes, 50 seconds
+for purposes of what we're dealing with with the Rock Creek HOA the fact that we're uh talking with them now and having kind of constructive uh
+6:58
+6 minutes, 58 seconds
+discussions I think is something that should just continue um you know at the end of the day the uh the dollar amount that you know we were last spending when
+7:07
+7 minutes, 7 seconds
+it came to fence maintenance maintance was $150,000 roughly uh on an annual basis.
+7:14
+7 minutes, 14 seconds
+Um so I don't think that it's in, you know, the taxpayers's interest for us to get involved in litigation
+7:21
+7 minutes, 21 seconds
+unnecessarily. I'm I'm pretty confident that we can come to some sort of reasonable uh resolution of this issue and u this is certainly I think the most
+7:31
+7 minutes, 31 seconds
+cost-effective means to do so. So, I'm supportive of entering into the tolling agreement and
+7:38
+7 minutes, 38 seconds
+continuing our conversations with the HOA going forward.
+7:46
+7 minutes, 46 seconds
+Others, I would agree. I'm just very encouraged that we're now having a conversation.
+7:53
+7 minutes, 53 seconds
+So, anything we can do to keep that going, I'm all for.
+8:01
+8 minutes, 1 second
+Agreed. All right.
+8:04
+8 minutes, 4 seconds
+Sounds good. Anybody else have anything they want to say? Otherwise, I'll make a motion.
+8:09
+8 minutes, 9 seconds
+I'll make a motion to approve Town of Superior Resolution number R-92, series 2025, a resolution of the town council
+8:16
+8 minutes, 16 seconds
+of the town of Superior approving a tolling agreement with the Rock Creek Homeowners Association. Second. Second.
+8:24
+8 minutes, 24 seconds
+All right, we got a motion from Mayor Lacis, a second from Council Member Foster. Roll call vote, please.
+8:37
+8 minutes, 37 seconds
+Council member Miller, yes.
+8:40
+8 minutes, 40 seconds
+Council member Kracraft, yes.
+8:43
+8 minutes, 43 seconds
+Council member Foster, yes.
+8:46
+8 minutes, 46 seconds
+Mayor Prom Serbu, yes.
+8:49
+8 minutes, 49 seconds
+Mayor Lasis, yes.
+8:51
+8 minutes, 51 seconds
+Council member Shaw, yes. Council member Cowish.
+9:00
+9 minutes
+Sorry. Yeah.
+9:02
+9 minutes, 2 seconds
+Yes. [clears throat] All right. Passes unanimously. And with that, I will adjourn at 209.
+9:12
+9 minutes, 12 seconds
+Happy Thanksgiving, everybody. See you next time. Happy Thanksgiving. Happy Thanksgiving. Bye.
+Sync to video time
+
+
+----------------------------------------------------------------------------------------------------
+
+Search transcript
+0:02
+2 seconds
+the 45 minute refresher. This is the more I think it's closer to a 90 minute course um or 60 to 90 minutes. Uh but
+0:11
+11 seconds
+there were some inaccuracies that was no longer um some of the things in it were no longer accurate. So we have revised
+0:19
+19 seconds
+the script and it's going to be recorded I believe tomorrow. Um, and then once we
+0:27
+27 seconds
+have that, we will listen to that to make sure everything is proper and sounds right. And then once
+0:33
+33 seconds
+it is, we'll upload that to the LMS so that will um then be used for the new hire so they'll have the most accurate and up-to-date information.
+0:45
+45 seconds
+Rich, when you mean when you say new hires, you're talking about new judicial employee hires, correct? So all new hires are required
+0:54
+54 seconds
+to take the the leap course within I believe it's six is it six months Ally?
+1:01
+1 minute, 1 second
+Yeah within six months of hire. Great.
+1:06
+1 minute, 6 seconds
+Um you know of course there's no indication at least to my knowledge of any new judicial appointments this
+1:13
+1 minute, 13 seconds
+spring. Um I I anticipate some just because it just normally happens in the spring. Um, do you have um a program
+1:23
+1 minute, 23 seconds
+ready for those new appointments in the event that they come?
+1:27
+1 minute, 27 seconds
+Yes. So, we if there is a new judge class, which Brit will know better than I, but I'm assuming there will be one,
+1:35
+1 minute, 35 seconds
+um, we will uh, Darede usually has us, Ally, and I present to uh to the new judges and magistrates. Um, so we would be ready to go for that.
+1:45
+1 minute, 45 seconds
+Great. Excellent.
+1:49
+1 minute, 49 seconds
+Are there any questions of Rich on um on the training updates?
+1:56
+1 minute, 56 seconds
+Great. All right, then. Um let's move on to the ISP guides and flag posters.
+2:03
+2 minutes, 3 seconds
+Sure. Um so the uh the flag posters have been sent out to everybody. Um, so all
+2:12
+2 minutes, 12 seconds
+locations should have the the the new form the new flag posters hopefully displayed um in the courouses that I've
+2:20
+2 minutes, 20 seconds
+seen um generally most of them are Harford with Brandon. Um I I I do see the um the posters up. Um so I think
+2:29
+2 minutes, 29 seconds
+that's great. If anybody needs additional ones or if something got missed for some reason, please let Ally
+2:37
+2 minutes, 37 seconds
+know and we can get those um shipped out. Regarding the I speak guides, I I did not send those yet to culp.
+2:47
+2 minutes, 47 seconds
+Honestly, I wanted them to focus on the flag things. I didn't want to um overload them with both projects at the same time. Um so, now that we're done
+2:55
+2 minutes, 55 seconds
+with that, I think they have a little bit of things that they do. um in in January that there's kind of a crunch
+3:02
+3 minutes, 2 seconds
+with um so probably in February or so we'll send that information out to CULP to get those printed and sent out to everybody.
+3:12
+3 minutes, 12 seconds
+Great.
+3:15
+3 minutes, 15 seconds
+Does anybody have any questions about the the guides?
+3:22
+3 minutes, 22 seconds
+Good. All right. Well, moving along. Uh how about the telephonic bilingual services?
+3:28
+3 minutes, 28 seconds
+Sure. Uh at last meeting we mentioned that we will be going out to bid for our
+3:34
+3 minutes, 34 seconds
+telephonic bilingual services. These are the interpretations that are done over
+3:41
+3 minutes, 41 seconds
+the phone generally for clerk's offices, uh support enforcement meetings, court
+3:48
+3 minutes, 48 seconds
+service centers, probation, family meetings, um the all of those outofthecore events. Um, so we did go
+3:56
+3 minutes, 56 seconds
+out to bid for that. Um, we have a meeting with purchasing on Monday regarding it. Um, so we should have more
+4:05
+4 minutes, 5 seconds
+information at our next meeting. Um, in the event new vendors are brought on
+4:13
+4 minutes, 13 seconds
+board, we will have to develop training materials and then train everybody in
+4:20
+4 minutes, 20 seconds
+the branch on it. um how we did it last time in 2020. Um Alli's office
+4:27
+4 minutes, 27 seconds
+physically went out to every office in the judicial branch um to provide the training materials to update the phones
+4:36
+4 minutes, 36 seconds
+um and I anticipate we'll be doing that this way again. So it's while it's time consuming, it seems to be the most
+4:44
+4 minutes, 44 seconds
+effective way of getting the information out there.
+4:49
+4 minutes, 49 seconds
+Um, so once we have that information on how what direction we're actually going to go, we'll let everybody know. Um, and
+4:56
+4 minutes, 56 seconds
+then we'll we'll start working on that training program and materials to get everything out and up and running as soon as possible.
+5:09
+5 minutes, 9 seconds
+Any questions?
+5:12
+5 minutes, 12 seconds
+All right. Well, good. Now, let's move on to the 2026 initiatives. And here I I need to apologize because I should have really just touched base with Rich
+5:20
+5 minutes, 20 seconds
+before today's meeting um to see if we have any initiatives to um consider. Uh
+5:28
+5 minutes, 28 seconds
+and I didn't do that. So um Rich, I'll put you on the hot spot here and I'll ask if you have any uh any um
+5:36
+5 minutes, 36 seconds
+initiatives that you would like to see come about this year.
+5:41
+5 minutes, 41 seconds
+Yeah. The one thing that we would like to do and we've talked about it a lot and just timing has never worked out
+5:49
+5 minutes, 49 seconds
+with all with other things is we kind we've gotten a a training for vendors, we've gotten a training for staff, we
+5:57
+5 minutes, 57 seconds
+have a training for judges. Um we don't have anything for the external stakeholders um the public attorneys. So
+6:07
+6 minutes, 7 seconds
+what we would like to do is to come up with an online course that will just tell the services that are offered and
+6:15
+6 minutes, 15 seconds
+how those services can be provided. Um so that's something we would like to work on this year and hopefully get
+6:23
+6 minutes, 23 seconds
+online. Um so that piece of the the external world will will know what what
+6:30
+6 minutes, 30 seconds
+they have available through the branch um when they come in here. Um, so we don't have that. So that's something we
+6:37
+6 minutes, 37 seconds
+would like to work on. Um, I did ask um, Vivven Alley, there's a big um, ADA
+6:46
+6 minutes, 46 seconds
+initiative that's a branchwide initiative that's going on regarding the website um that has a translation
+6:55
+6 minutes, 55 seconds
+component um, that I'll let Viv um, and Ally speak about uh, briefly.
+7:02
+7 minutes, 2 seconds
+Sure. Um the judicial branch is currently in the process of remediating its website and all online content. This
+7:09
+7 minutes, 9 seconds
+includes our branch forms. Uh we want to make sure that they comply with the new federal ADA accessibility standards and the deadline for compliance is this
+7:18
+7 minutes, 18 seconds
+April. So all forms including the foreign language translations have to be remediated. uh we will be working closely with translation services to
+7:27
+7 minutes, 27 seconds
+ensure that the forms um are are comply with uh the official translation because they're going to be they need to add accessible text and tool tips for the
+7:36
+7 minutes, 36 seconds
+visually impaired. Um so we want to make sure that any additional language is that is added to the forms complies with uh is approved by the uh translators.
+7:44
+7 minutes, 44 seconds
+Now most forms are going to be remediated inhouse but we are in the process of securing um a couple of vendors. We have one outside vendor
+7:53
+7 minutes, 53 seconds
+right now, Word Wizard, but we're in the process of getting more because we have hundreds, literally hundreds of forms to uh remediate. So, that that process is ongoing.
+8:03
+8 minutes, 3 seconds
+Yeah, we're just ready to proceed whenever um um everything is ready. Uh we'll just assign interpreters for all the four
+8:11
+8 minutes, 11 seconds
+languages that were translated into to work and uh be able to go through the forms. I think we're going to be provided with um with a license to be
+8:20
+8 minutes, 20 seconds
+able to do the the the the breeding to make sure everything flows correctly, but uh we're just ready whenever everything is ready to go.
+8:29
+8 minutes, 29 seconds
+Yeah, I I'll confirm that you get a common look. That's the that's the software that they've been using. So, I'll make sure you have a license for that as well.
+8:36
+8 minutes, 36 seconds
+Okay.
+8:39
+8 minutes, 39 seconds
+So those judge those are the two main projects in addition to the likelihood that we may be doing a a mass training
+8:46
+8 minutes, 46 seconds
+on the telephonic bilingual services this year um if we get a new vendor. So those are kind of the the things that we were looking to focus on in 2026.
+8:56
+8 minutes, 56 seconds
+I think those are really great ideas particularly with the attorneys just because uh I know there are a lot of attorneys who practice in our courts
+9:04
+9 minutes, 4 seconds
+daily like the public defenders and states attorneys and uh people in government work but there are a lot of people in private practice particularly
+9:12
+9 minutes, 12 seconds
+the younger ones who don't really understand or are not may not be aware of um of these services um I think once
+9:20
+9 minutes, 20 seconds
+we educate them they can educate their clients and the public will that um will become educa educated as well. But I
+9:28
+9 minutes, 28 seconds
+think this is a good initiative and I'm glad that you are you're taking it on. Thank you.
+9:35
+9 minutes, 35 seconds
+Okay. Um anybody has anything to add to this initiative program?
+9:44
+9 minutes, 44 seconds
+All right. Good. Well, thank you, Rich.
+9:46
+9 minutes, 46 seconds
+Um everybody Oh, Michelle raised her hand. Michelle had her hand up. Okay. Can you hear me? Yes.
+9:55
+9 minutes, 55 seconds
+Yes.
+9:56
+9 minutes, 56 seconds
+Perfect. Um so I do I do want to echo that I do think it's a great idea to do the um training for external
+10:04
+10 minutes, 4 seconds
+stakeholders because I know that even you know legal services is very aware of language access you know and the
+10:12
+10 minutes, 12 seconds
+importance of it but even they have trouble sometimes understanding you know what services are available in
+10:18
+10 minutes, 18 seconds
+what context. Um, I also wanted to just uh make a note and ask a question about
+10:25
+10 minutes, 25 seconds
+the initiative to um kind of change some of the the forms. And I was uh one of
+10:32
+10 minutes, 32 seconds
+the things that I have noticed for a long time is how complicated it is when
+10:39
+10 minutes, 39 seconds
+you're doing a search for a form. Um I don't know if you guys have ever done that. Um but you know we use obviously
+10:46
+10 minutes, 46 seconds
+we use the forms all the time and um it's kind of I could probably explain more you know if I if I shared my screen
+10:55
+10 minutes, 55 seconds
+um later on with someone but um if someone could also just look at what comes up when the search function is
+11:03
+11 minutes, 3 seconds
+used because I think that that makes it really hard I mean it's hard for me even to find the form and I can't imagine that it's it's easy for the public when
+11:11
+11 minutes, 11 seconds
+you're just searching for for something like that and you don't always know under which category it's going to be, especially if you're not an attorney.
+11:21
+11 minutes, 21 seconds
+No, thank you, Michelle. We could definitely talk to our forms person regarding regarding that. We have one
+11:28
+11 minutes, 28 seconds
+individual who oversees forms. Um, he used to be in legal services. I know he's now in court operations. So, I'll
+11:36
+11 minutes, 36 seconds
+figure out the best avenue of doing that, but we can definitely do that.
+11:41
+11 minutes, 41 seconds
+Thank you so much. And I think part of it is also just that the search function when it comes up with the results, it
+11:48
+11 minutes, 48 seconds
+will it makes a new category for each thing. So it'll say under family forms, it'll have a couple of things under and
+11:55
+11 minutes, 55 seconds
+I think if it came up as just one list, it might be e just that would be easier to navigate. But anyway, thank you so much.
+12:03
+12 minutes, 3 seconds
+Oh, thank you. Yeah, thank you. Any other comments about um this initiative?
+12:11
+12 minutes, 11 seconds
+Great. All right. Does anybody have any other business that we should address?
+12:19
+12 minutes, 19 seconds
+All right. Well, um, so I think last year we mentioned, uh, we set forth,
+12:27
+12 minutes, 27 seconds
+[snorts] um, quarterly meetings if I remember correctly. Uh, I don't know if you, um, wish to approach the the
+12:35
+12 minutes, 35 seconds
+meetings in the same way or do you want to just play by ear? I thought it was kind of nice to have at least uh some uh benchmark as to when we would meet next.
+12:44
+12 minutes, 44 seconds
+Um if you all thought it was a good idea, let's just do it again this year and just pick quarterly dates.
+12:52
+12 minutes, 52 seconds
+Um all right. Yeah, I think that's a good idea, Judge.
+12:56
+12 minutes, 56 seconds
+All right. Tori's got the thumbs up, so that's got to be good. So, today is January 28th. Um,
+13:08
+13 minutes, 8 seconds
+you know, maybe we should meet in May. That works for me.
+13:17
+13 minutes, 17 seconds
+Does Does anybody prefer it a date uh certain date or a day or and a time?
+13:28
+13 minutes, 28 seconds
+I'm It could be after May 6. That would be ideal. Sure. Oh, yeah. Right. Of course.
+13:37
+13 minutes, 37 seconds
+And probably for Rich, too. Poor Rich. Yeah. We'll be a little busy.
+13:41
+13 minutes, 41 seconds
+Yeah. Let's just, you know, let's just plan at the end of the month. Let's just say the 28th, which will be for That's a Thursday.
+13:49
+13 minutes, 49 seconds
+Okay.
+13:49
+13 minutes, 49 seconds
+Um I think I heard somebody say the afternoon is better.
+13:55
+13 minutes, 55 seconds
+Should we do is is Wednesday. Okay. I I may be in a out of state training.
+14:02
+14 minutes, 2 seconds
+Okay. on on Thursday and Friday.
+14:05
+14 minutes, 5 seconds
+All right. So, let's do the 27th. Um, you know, is 3 o'clock good for
+14:14
+14 minutes, 14 seconds
+everybody or Yes.
+14:16
+14 minutes, 16 seconds
+All right. So, thank you. I appreciate that.
+14:19
+14 minutes, 19 seconds
+Yeah. Yeah. So on May 27th um
+14:30
+14 minutes, 30 seconds
+to September so the next one will be in September I think
+14:37
+14 minutes, 37 seconds
+um our last meeting was September 22nd last year that's Tuesday.
+14:44
+14 minutes, 44 seconds
+Is that a good date?
+14:47
+14 minutes, 47 seconds
+That's fine for me. I have I have a conflict. I have a training conflict on that day. Um on Tuesday, I can do Wednesday again.
+14:56
+14 minutes, 56 seconds
+Sure.
+14:56
+14 minutes, 56 seconds
+Sorry. Quick switch pushing to Wednesday, but you do a lot of training. So, how about September 23rd? [laughter] We'll do it at at 3:00. Is that good?
+15:06
+15 minutes, 6 seconds
+Sounds good. Thank you again.
+15:10
+15 minutes, 10 seconds
+So, sure. Um you know, but that brings us to January.
+15:15
+15 minutes, 15 seconds
+Um, should we just hold off and just keep these three dates for now?
+15:20
+15 minutes, 20 seconds
+Yeah, I think that works. All right.
+15:22
+15 minutes, 22 seconds
+I'm I'm sorry. Can I confirm? I I have two dates. Do we have three dates down? I have May and September. Correct.
+15:30
+15 minutes, 30 seconds
+The next one will be January, late December, early January. Yeah.
+15:36
+15 minutes, 36 seconds
+If you want to schedule it now, it's fine. But why don't [clears throat] we hold off? That sounds good.
+15:43
+15 minutes, 43 seconds
+Yeah. So, so it'll be May 28th at 3 and then we'll meet another one uh have another one in September 23rd, I think it was.
+15:52
+15 minutes, 52 seconds
+I think it was May 27th. I think it was May 27th. Yeah. Wednesday, May 27th.
+16:00
+16 minutes
+Okay, let me double check. I think Troy May 27th. Yep.
+16:04
+16 minutes, 4 seconds
+Yeah, it's all my fault, your honor.
+16:07
+16 minutes, 7 seconds
+Yes, that's right. It's all the training that [laughter] you need.
+16:11
+16 minutes, 11 seconds
+Okay. So, that that's good. Uh Rich, I'll I'll probably touch base with you before our next meeting to see where we are in the initiative. And um you know,
+16:19
+16 minutes, 19 seconds
+I'll touch base with you uh beforehand uh if there is a new class of judges. I
+16:25
+16 minutes, 25 seconds
+like to um um be a part of that training or well, at least the conversation with the new judges about it because I do
+16:33
+16 minutes, 33 seconds
+think it's great.
+16:34
+16 minutes, 34 seconds
+Yeah. because I think it's very important uh for new judges and new new hires generally but um it's a great thing.
+16:43
+16 minutes, 43 seconds
+Perfect. All right. Anything else?
+16:47
+16 minutes, 47 seconds
+Wow. Well, it's a very quick meeting. Uh thank you all for your help. Um and then we'll see you May 27th.
+16:57
+16 minutes, 57 seconds
+Terrific. Thank you. Happy New Year everyone. Take care.

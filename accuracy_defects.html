@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MoM Pipeline Accuracy Defects</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  :root {
+    --ground:      #F6F8F5;
+    --surface:     #FFFFFF;
+    --surface-alt: #EDF1EC;
+    --ink:         #14191A;
+    --ink-soft:    #4A5450;
+    --ink-faint:   #78827D;
+    --rule:        #D6DDD6;
+    --rule-soft:   #E5EAE4;
+    --accent:      #2F6F4F;
+    --accent-soft: #DCEBE1;
+    --critical:    #A8342A;
+    --critical-bg: #F7E2DF;
+    --high:        #9A5A12;
+    --high-bg:     #F8EBD8;
+    --medium:      #4A6A86;
+    --medium-bg:   #E2EBF2;
+    --code-bg:     #EEF2ED;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0E1213;
+      --surface:     #161B1C;
+      --surface-alt: #1D2425;
+      --ink:         #E8EDE9;
+      --ink-soft:    #A6B0AB;
+      --ink-faint:   #7C8783;
+      --rule:        #2A3233;
+      --rule-soft:   #212829;
+      --accent:      #6FBF90;
+      --accent-soft: #1C3128;
+      --critical:    #E8837A;
+      --critical-bg: #3A211E;
+      --high:        #DFAC63;
+      --high-bg:     #362918;
+      --medium:      #8FB4D0;
+      --medium-bg:   #1C2A33;
+      --code-bg:     #1B2122;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #0E1213;
+    --surface:     #161B1C;
+    --surface-alt: #1D2425;
+    --ink:         #E8EDE9;
+    --ink-soft:    #A6B0AB;
+    --ink-faint:   #7C8783;
+    --rule:        #2A3233;
+    --rule-soft:   #212829;
+    --accent:      #6FBF90;
+    --accent-soft: #1C3128;
+    --critical:    #E8837A;
+    --critical-bg: #3A211E;
+    --high:        #DFAC63;
+    --high-bg:     #362918;
+    --medium:      #8FB4D0;
+    --medium-bg:   #1C2A33;
+    --code-bg:     #1B2122;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 16.5px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 24px 96px;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+
+  /* ── masthead ─────────────────────────────────────── */
+  header.masthead {
+    padding: 56px 0 28px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: clamp(30px, 4.6vw, 44px);
+    line-height: 1.1;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 18px;
+    color: var(--ink-soft);
+    margin: 0;
+    max-width: 63ch;
+  }
+  .meta {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin: 22px 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+  }
+
+  /* ── section headings ─────────────────────────────── */
+  h2 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-faint);
+    margin: 60px 0 22px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  /* ── ranking table ────────────────────────────────── */
+  .scroll { overflow-x: auto; }
+  table.rank {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 14px;
+    min-width: 620px;
+  }
+  table.rank th {
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    padding: 0 14px 9px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  table.rank td {
+    padding: 12px 14px 12px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: baseline;
+  }
+  table.rank td.id {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  table.rank td.gain {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  table.rank a { color: inherit; text-decoration-color: var(--rule); }
+
+  /* ── severity chips ───────────────────────────────── */
+  .chip {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .chip.critical { background: var(--critical-bg); color: var(--critical); }
+  .chip.high     { background: var(--high-bg);     color: var(--high); }
+  .chip.medium   { background: var(--medium-bg);   color: var(--medium); }
+
+  /* ── defect blocks ────────────────────────────────── */
+  article.defect {
+    padding: 30px 0 4px;
+    border-top: 1px solid var(--rule);
+  }
+  article.defect:first-of-type { border-top: none; }
+  .defect-head {
+    display: flex;
+    align-items: baseline;
+    gap: 13px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .defect-id {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  h3 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    margin: 0;
+    flex: 1 1 320px;
+    text-wrap: balance;
+  }
+  .defect p { max-width: 66ch; }
+  .defect p:first-of-type { margin-top: 10px; }
+
+  .where {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    margin: 0 0 16px;
+  }
+
+  /* ── evidence ─────────────────────────────────────── */
+  .evidence {
+    background: var(--code-bg);
+    border-left: 3px solid var(--accent);
+    padding: 15px 18px;
+    margin: 18px 0;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    line-height: 1.72;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .evidence .lbl {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 9px;
+    white-space: normal;
+  }
+
+  /* ── fix / pros / cons ────────────────────────────── */
+  .rx {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--rule-soft);
+    border: 1px solid var(--rule-soft);
+    margin: 20px 0 30px;
+  }
+  .rx > div { background: var(--surface); padding: 16px 18px; }
+  .rx > div.fix { grid-column: 1 / -1; background: var(--surface-alt); }
+  .rx h4 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin: 0 0 10px;
+    color: var(--ink-faint);
+  }
+  .rx .fix h4 { color: var(--accent); }
+  .rx ul { margin: 0; padding-left: 17px; }
+  .rx li { margin-bottom: 7px; font-size: 15px; }
+  .rx li:last-child { margin-bottom: 0; }
+  .rx p { margin: 0; font-size: 15px; max-width: none; }
+  @media (max-width: 640px) {
+    .rx { grid-template-columns: 1fr; }
+  }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.875em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .rx code { font-size: 0.85em; }
+
+  strong { font-weight: 600; }
+  .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  .note {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding: 15px 18px;
+    margin: 26px 0;
+    font-size: 15.5px;
+  }
+  .note p { margin: 0; max-width: 66ch; }
+  .note p + p { margin-top: 9px; }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 22px;
+    border-top: 1px solid var(--rule);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--ink-faint);
+  }
+  footer a { color: var(--accent); }
+  footer p { max-width: 70ch; }
+</style>
+<style>
+  html { color-scheme: light dark; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">offline-mom-api · accuracy audit</p>
+  <h1>What Still Costs Us Accuracy</h1>
+  <p class="standfirst">Ten defects in the audio&#8202;→&#8202;transcript&#8202;→&#8202;minutes pipeline, ranked by measured impact. Every claim below is backed by a number taken from this stack, not an estimate.</p>
+  <p class="meta">
+    <span>7 Sep 2026</span>
+    <span>gpt-oss-120b · whisper large-v3 · NeMo TitaNet</span>
+    <span>measured on 2 real meetings + 5 samples</span>
+  </p>
+</header>
+
+<h2>Ranked by expected gain</h2>
+<div class="scroll">
+<table class="rank">
+  <thead>
+    <tr><th>ID</th><th>Defect</th><th>Severity</th><th>Est. gain</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="id"><a href="#d1">D1</a></td><td>Speaker names are never resolved</td><td><span class="chip critical">Critical</span></td><td class="gain">+5 pts</td></tr>
+    <tr><td class="id"><a href="#d2">D2</a></td><td>Whisper translates English audio instead of transcribing it</td><td><span class="chip high">High</span></td><td class="gain">+2–3 pts</td></tr>
+    <tr><td class="id"><a href="#d3">D3</a></td><td>Speaker attribution uses segment overlap only</td><td><span class="chip high">High</span></td><td class="gain">+2–3 pts</td></tr>
+    <tr><td class="id"><a href="#d4">D4</a></td><td>ASR garble is never repaired</td><td><span class="chip high">High</span></td><td class="gain">+1–2 pts</td></tr>
+    <tr><td class="id"><a href="#d5">D5</a></td><td>Decisions and action items restate each other</td><td><span class="chip medium">Medium</span></td><td class="gain">+1 pt</td></tr>
+    <tr><td class="id"><a href="#d6">D6</a></td><td>Reworded duplicates survive the merge</td><td><span class="chip medium">Medium</span></td><td class="gain">+1 pt</td></tr>
+    <tr><td class="id"><a href="#d7">D7</a></td><td>The legacy fallback cannot produce structured fields</td><td><span class="chip medium">Medium</span></td><td class="gain">robustness</td></tr>
+    <tr><td class="id"><a href="#d8">D8</a></td><td><code>assigned_to</code> equals <code>assigned_by</code></td><td><span class="chip medium">Medium</span></td><td class="gain">&lt;1 pt</td></tr>
+    <tr><td class="id"><a href="#d9">D9</a></td><td>Filler removal deletes legitimate repeated words</td><td><span class="chip medium">Medium</span></td><td class="gain">&lt;1 pt</td></tr>
+    <tr><td class="id"><a href="#d10">D10</a></td><td>Two-character floor lets near-empty audio through</td><td><span class="chip medium">Medium</span></td><td class="gain">robustness</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <p><strong>How to read the gain column.</strong> Points are on the 86% overall score from the LEP committee meeting, using the same field weights as the GitLab scoring. They are not additive: D1 and D2 interact directly, and fixing D3 without D1 recovers less than the table suggests.</p>
+</div>
+
+<h2>The defects</h2>
+
+<article class="defect" id="d1">
+  <div class="defect-head">
+    <span class="defect-id">D1</span>
+    <h3>Speaker names are never resolved</h3>
+    <span class="chip critical">Critical</span>
+  </div>
+  <p class="where">llama-service/main.py:139 · api/core/mom.py</p>
+
+  <p>llama-service ships a <code>/identify-speakers</code> endpoint with a written and tuned <code>SPEAKER_MAPPING_PROMPT</code> that maps speaker labels to real names from self-introductions and direct address. <strong>The API never calls it.</strong> The only endpoint it uses is <code>/summarize</code>.</p>
+
+  <p>The consequence is not that names are missing — it is that the model <em>has</em> the names and cannot attach them to anyone. In the LEP minutes it wrote "Michelle raised a concern" in <code>key_points</code> and assigned an action item to "Rich", while <code>attendees</code> listed six anonymous tags.</p>
+
+  <div class="evidence"><span class="lbl">Measured · LEP Committee Meeting, 17 min, 6 speakers</span>grep '/identify-speakers'  api/   →  0 callers
+grep '/correct-transcript' api/   →  0 callers
+
+transcript names        Rich, Allie, Michelle, Viv, Tori, Brit
+attendees bound          0 of 4 resolvable
+attendees field score   50%   (count 6/6 correct, names 0%)
+action items w/ wrong owner   2 of 10</div>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix</h4>
+      <p>After <code>label_transcript()</code>, POST the labelled transcript to <code>/identify-speakers</code>, then rewrite the <code>[Speaker_N]</code> tags with any confidently-resolved names before calling <code>/summarize</code>. Keep the tag whenever the mapping is not corroborated.</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>The endpoint, prompt and parser already exist and are tested — no second prompt to maintain.</li>
+        <li>Targets the single largest measured gap; attendees goes from 50% toward 100%.</li>
+        <li>Named speakers make downstream attribution more reliable, so it partly fixes D3 for free — the model reasons better about "Rich said" than "[Speaker_1] said".</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li><strong>A wrong name is worse than no name.</strong> An anonymous tag is honest; a misbound name asserts a false fact about a real person in a document their colleagues read. This needs a confidence gate, not a best guess.</li>
+        <li>One extra model call per request (~15–40 s on this hardware).</li>
+        <li>The prompt was written for "Speaker A" style labels; it needs checking against the <code>[Speaker_N]</code> convention this API emits.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<article class="defect" id="d2">
+  <div class="defect-head">
+    <span class="defect-id">D2</span>
+    <h3>Whisper translates English audio instead of transcribing it</h3>
+    <span class="chip high">High</span>
+  </div>
+  <p class="where">api/core/engine.py:104 — <code>"translate": "true"</code>, sent unconditionally</p>
+
+  <p>The translate switch is correct for Hindi and Hinglish, and the code documents why auto-detect matters. But it is sent for <em>every</em> file, including audio Whisper has already detected as English. The code comments call this "effectively a copy". I A/B tested it on your own audio, and it is not.</p>
+
+  <div class="evidence"><span class="lbl">Measured · 3-minute slice, LEP meeting, detected lang = english</span>word-level similarity        90.2%   (414 w vs 440 w)
+
+translate  LOST:   "CULP"      "Harford"        ← proper nouns
+                   "correct. Everything is"  "mean when you"
+translate  KEPT:   "Allie" "Brandon" "LEP"     ← capitalised
+transcribe KEPT:   all of the above, but lowercased</div>
+
+  <p>Two proper nouns vanished entirely under <code>translate</code>. That is the README's noted "proper nouns degrade across the language switch", now quantified — and unrecoverable downstream, because the LLM cannot repair a word that was never written.</p>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix</h4>
+      <p>Detect the language on the first ~30 s, then pick the task: <code>transcribe</code> when the result is <code>en</code>, <code>translate</code> otherwise. The Hindi and Hinglish paths are untouched.</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>Recovers dropped words and proper nouns on English meetings — which is most of your current test set.</li>
+        <li>No risk to the multilingual path, which keeps today's exact behaviour.</li>
+        <li>Whisper's English transcribe path is its strongest and most-evaluated mode.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li><strong>It fights D1.</strong> <code>transcribe</code> lowercases proper nouns ("rich", "culp"), and lowercase names are harder for the name-binding pass to spot. These two fixes must be tested together, not separately.</li>
+        <li><code>transcribe</code> keeps every "um" and "uh" — harmless, since preprocessing strips them, but it lengthens the transcript.</li>
+        <li>Adds a branch and a second pass to a path that is currently simple and carefully documented.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<article class="defect" id="d3">
+  <div class="defect-head">
+    <span class="defect-id">D3</span>
+    <h3>Speaker attribution uses segment overlap only</h3>
+    <span class="chip high">High</span>
+  </div>
+  <p class="where">api/utils/formatting.py — <code>_find_speaker()</code></p>
+
+  <p>Each Whisper segment is assigned to whichever NeMo speaker occupies the most of it. Whisper and NeMo run <em>separate</em> VADs, so their boundaries never line up — the code says so itself. When one Whisper segment straddles a speaker change, the whole segment goes to the majority speaker and the other speaker's words are silently reattributed.</p>
+
+  <div class="evidence"><span class="lbl">Measured · symptoms in generated minutes</span>LEP     "Provide the Common Look licence"  → owner = the RECIPIENT
+LEP     "Touch base with Rich"             → owner = Rich (the TARGET)
+GitLab  one bullet emitted under BOTH Speaker_2 and Speaker_3
+
+published research: segment-level speaker reassignment corrects
+                    >=40% of speaker-confusion word errors</div>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix — three options, cheapest first</h4>
+      <p><strong>(a)</strong> Split a Whisper segment when a NeMo turn boundary falls inside it, rather than assigning the whole segment. <strong>(b)</strong> Enable word timestamps and assign per word. <strong>(c)</strong> Add a post-hoc reassignment pass over each segment.</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>(a) needs no new model and no extra inference — it is pure arithmetic on timestamps you already have.</li>
+        <li>Fixes the exact failure that puts a decision or an action item against the wrong person, which is the most damaging error class in minutes.</li>
+        <li>(b) is the approach WhisperX uses and is the strongest of the three.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li>(a) produces more, shorter turns — more <code>[Speaker_N]</code> tags, a longer transcript, and more tokens into an already tight budget.</li>
+        <li>(b) requires word timestamps from whisper.cpp and a rewrite of <code>label_transcript()</code>; it is the biggest change here.</li>
+        <li>None of the three helps if diarization itself clustered wrongly — this fixes alignment, not clustering.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<article class="defect" id="d4">
+  <div class="defect-head">
+    <span class="defect-id">D4</span>
+    <h3>ASR garble is never repaired</h3>
+    <span class="chip high">High</span>
+  </div>
+  <p class="where">llama-service/main.py:147 — <code>/correct-transcript</code>, zero callers</p>
+
+  <p>A second built-and-idle endpoint. <code>TRANSCRIPT_CORRECTION_PROMPT</code> exists to fix obvious ASR errors from context while preserving speaker labels, and it accepts a <code>known_names</code> list to anchor name correction. Nothing calls it, so garbled words travel all the way into the minutes.</p>
+
+  <div class="evidence"><span class="lbl">Measured · garble that reached the finished minutes</span>"the sick"          → should be  "SEC"        (appears as "SICK team")
+"safety is saying"  → garbled;  became a person named "Safety"
+"Sweden sites"      → should be  "threat insights"
+"K-lead"            → should be  "QA lead"
+"challenge assessment" → should be "talent assessment"</div>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix</h4>
+      <p>Call <code>/correct-transcript</code> between labelling and summarising, passing any names resolved by D1 as <code>known_names</code>. The two fixes compound: confirmed names are exactly the anchor the corrector needs.</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>Repairs errors at the only point where they are still repairable — before the LLM builds facts on top of them.</li>
+        <li>Already written, already prompted; there is a <code>term_corrector</code> and a lexicon builder in the service to support it.</li>
+        <li>Directly removes the residue that the never-invent rules can only <em>contain</em> — the rules stop "Safety" becoming "Seth", but only correction removes "Safety".</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li><strong>It is a rewrite pass over the evidence.</strong> A correction model that over-reaches invents content in the one artefact everything else is scored against — the opposite of the property you want.</li>
+        <li>One more model call, and on a long transcript it is the expensive kind (large input, large output).</li>
+        <li>Needs its own guard-rail: the service already documents a case where an over-correction turned "coherent" into "Qdrant".</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<article class="defect" id="d5">
+  <div class="defect-head">
+    <span class="defect-id">D5</span>
+    <h3>Decisions and action items restate each other</h3>
+    <span class="chip medium">Medium</span>
+  </div>
+  <p class="where">llama-service/prompts.py — <code>DECISIONS_EXTRACTION_PROMPT</code></p>
+
+  <p>The decisions prompt counts "a task directly assigned to someone by name" as a decision. The action-items prompt counts the same event as an action item. Both fills now always run, so the same fact reliably lands in both fields.</p>
+
+  <div class="evidence"><span class="lbl">Measured · overlap between the two fields</span>LEP           3 of 6 decisions restate an action item
+multispeaker  2 of 5 decisions restate an action item</div>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix</h4>
+      <p>After both fills, drop any decision whose text near-matches an action item's task — reusing the term-overlap helper already written for D6.</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>Deterministic, no model call, and reuses code already in the service.</li>
+        <li>Removes visible redundancy in the field readers scan first.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li>Some assignments genuinely <em>are</em> decisions — "Alan will serve as acting manager" belongs in both. A blunt rule loses that.</li>
+        <li>Inherits D6's threshold problem: the same overlap maths, the same inability to separate reworded duplicates from genuinely distinct items.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<article class="defect" id="d6">
+  <div class="defect-head">
+    <span class="defect-id">D6</span>
+    <h3>Reworded duplicates survive the merge</h3>
+    <span class="chip medium">Medium</span>
+  </div>
+  <p class="where">llama-service/core/llm_manager.py — <code>_is_near_duplicate()</code></p>
+
+  <p>The main pass and the focused pass both find the same task and word it differently. The current detector compares stemmed content words. I tested it against the real pairs, and bag-of-words cannot separate them: the duplicate sits <em>below</em> the threshold and a genuinely distinct pair sits just above it.</p>
+
+  <div class="evidence"><span class="lbl">Measured · the actual pairs from the LEP minutes</span>duplicate decision      overlap  9/17   threshold 10.2   MISSED
+duplicate action item   overlap  3/10   threshold  6.0   MISSED
+DISTINCT pair           overlap  6/11   threshold  6.6   kept (correct)
+
+loosening enough to catch the first would merge the third</div>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix</h4>
+      <p>Compare meaning, not vocabulary — either a small local embedding model for cosine similarity, or one cheap LLM pass asked to merge duplicates in the finished lists.</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>Separates the two cases the current maths provably cannot.</li>
+        <li>An LLM dedup pass needs no new dependency — the model is already loaded and resident.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li>An embedding model means new weights, more unified memory, and a new failure mode on a box already at 99&#8202;GB.</li>
+        <li>An LLM pass adds latency and can itself merge two things that should stay apart — trading a deterministic error for a non-deterministic one.</li>
+        <li><strong>Doing nothing is defensible.</strong> Both duplicated items are <em>true</em>; the cost is tidiness, not accuracy. The current strictness fails in the safe direction.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<article class="defect" id="d7">
+  <div class="defect-head">
+    <span class="defect-id">D7</span>
+    <h3>The legacy fallback cannot produce structured fields</h3>
+    <span class="chip medium">Medium</span>
+  </div>
+  <p class="where">llama-service/core/llm_manager.py — <code>_generate_mom_legacy()</code> returns no <code>content</code></p>
+
+  <p>When the JSON pipeline fails, the service falls back to a text pipeline that renders real minutes but returns no structured object. Today the API surfaces that document with a note instead of discarding it — but every structured field is still empty on that path, so a caller reading <code>action_items</code> gets nothing.</p>
+
+  <div class="evidence"><span class="lbl">Measured · before the budget fix, LEP meeting</span>JSON pass    truncated mid-object      -> invalid
+repair retry content=None (all budget spent reasoning)
+legacy pass  3,931 chars rendered, content = {}
+API response mom: null   "no meeting content"     <- false</div>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix</h4>
+      <p>Either parse the legacy render back into <code>content</code>, or delete the legacy path — its own comment already marks it <code>TODO(Stage 6): Remove after JSON pipeline is production validated</code>.</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>Deleting it removes an entire class of silent degradation, and a second copy of four large prompts that must be kept in sync with the JSON ones.</li>
+        <li>The raised token budgets have already made this path far less likely to trigger.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li>Deleting removes the safety net: a JSON failure would become a hard error rather than a degraded document.</li>
+        <li>Parsing the render is fragile — a text parser over LLM prose is exactly the kind of code that breaks quietly.</li>
+        <li>The legacy path is the only thing that has ever produced output when the JSON path failed. Retiring it needs evidence across more clips than we have.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<article class="defect" id="d8">
+  <div class="defect-head">
+    <span class="defect-id">D8</span>
+    <h3><code>assigned_to</code> equals <code>assigned_by</code></h3>
+    <span class="chip medium">Medium</span>
+  </div>
+  <p class="where">llama-service/prompts.py — the rule exists and is ignored</p>
+  <p>The prompt says "NEVER put the same person in both". Five of the ten LEP action items are <code>Speaker_1 / Speaker_1</code>, and the multispeaker sample did the same for Rahul. The model is describing a self-commitment, which is real — but it fills the assigner slot with the owner rather than leaving it empty.</p>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix</h4>
+      <p>Clear <code>assigned_by</code> when it equals <code>assigned_to</code>, in the same post-parse step that already unpacks owner and deadline.</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>One deterministic line, no model call, no prompt change.</li>
+        <li>Enforces a rule the prompt already states, rather than asking the model again.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li>Loses a true fact — that the task was self-assigned rather than delegated. A dedicated flag would preserve it, at the cost of a schema change.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<article class="defect" id="d9">
+  <div class="defect-head">
+    <span class="defect-id">D9</span>
+    <h3>Filler removal deletes legitimate repeated words</h3>
+    <span class="chip medium">Medium</span>
+  </div>
+  <p class="where">llama-service/utils/text_utils.py — <code>_remove_fillers()</code></p>
+  <p>The rule <code>\b(\w+)\s+\1\b</code> collapses any doubled word. That is right for stutters and wrong for English that legitimately doubles.</p>
+
+  <div class="evidence"><span class="lbl">Measured · run against the shipped function</span>"he had had enough of the delays"
+   -> "he had enough of the delays"          tense changed
+
+"the fact that that happened is the issue"
+   -> "the fact that happened is the issue"  clause broken</div>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix</h4>
+      <p>Require three or more repeats for the generic rule, and keep a short allow-list for the handful of genuine English doublings (<code>had had</code>, <code>that that</code>).</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>Trivial change, immediately testable, no model involved.</li>
+        <li>Stops a preprocessing step from altering evidence before anything else sees it.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li>Real stutters are far more common in speech than legitimate doublings, so this trades a small semantic gain for slightly noisier input.</li>
+        <li>The measured damage is low — the LLM reads through "he had enough" without changing any conclusion.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<article class="defect" id="d10">
+  <div class="defect-head">
+    <span class="defect-id">D10</span>
+    <h3>Two-character floor lets near-empty audio through</h3>
+    <span class="chip medium">Medium</span>
+  </div>
+  <p class="where">api/config.py:56 — <code>MIN_TRANSCRIPT_CHARS = 80</code></p>
+  <p>Eighty characters is roughly one sentence. Anything above it goes to a full MoM run — a chunked pass, three extraction passes, and several minutes of GPU time — to produce minutes of a single utterance.</p>
+
+  <div class="rx">
+    <div class="fix">
+      <h4>Fix</h4>
+      <p>Raise the floor to a few hundred characters, and reject on a low <em>distinct-word</em> count rather than raw length, so a repeated hallucination loop is caught too.</p>
+    </div>
+    <div>
+      <h4>Pros</h4>
+      <ul>
+        <li>Saves minutes of GPU time per junk upload on a machine where one request blocks the next.</li>
+        <li>A clear rejection is more useful to a caller than minutes of one sentence.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Cons</h4>
+      <ul>
+        <li>A genuinely short but valid meeting — a two-minute stand-up — would be refused. The floor has to be low enough to admit those.</li>
+        <li>Purely defensive: it improves nothing on the meetings you are actually testing.</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<h2>What I would do, in order</h2>
+
+<div class="note">
+  <p><strong>D1 and D4 together, first.</strong> Both are already-built endpoints sitting idle, they reinforce each other — resolved names are the anchor the corrector wants — and between them they own the largest measured losses. Two HTTP calls in <code>_audio_to_english()</code>, no new prompts.</p>
+  <p><strong>Then D2 and D3 as one experiment.</strong> They interact: <code>transcribe</code> keeps more words but lowercases the names D1 depends on. Testing them separately will give a misleading result on both.</p>
+  <p><strong>D5, D8, D9 are an afternoon</strong> of deterministic post-processing with no model calls and no new failure modes. Cheap to do, cheap to revert.</p>
+  <p><strong>D6 and D7 I would leave.</strong> D6's current setting fails in the safe direction and both duplicated items are true. D7's fallback has not fired since the token budgets were raised — retiring it needs more evidence than two meetings.</p>
+</div>
+
+<footer>
+  <p>Scores use the field weights from the GitLab staff-meeting audit, applied unchanged so the numbers stay comparable across clips. Timings from the GB10 with gpt-oss-120b resident in unified memory.</p>
+  <p>Segment-reassignment figure: <a href="https://arxiv.org/pdf/2406.03155">Once more Diarization (arXiv:2406.03155)</a>. Speaker-attribution framing: <a href="https://www.sciencedirect.com/science/article/pii/S0167739X26002827">Speaker-attributed meeting transcription refinement</a>.</p>
+</footer>
+
+</div>
+</body>
+</html>

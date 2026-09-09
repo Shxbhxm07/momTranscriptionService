@@ -1,0 +1,106 @@
+# LOCAL DEV DEPENDENCIES — Kafka, MinIO and Elasticsearch on this machine, so the ingestion
+# pipeline can be built and tested end-to-end before IAF's endpoints exist.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.online.yml -f docker-compose.dev.yml up -d
+#
+# Nothing here ships. Switching to their infrastructure is the same environment-variable move as
+# the OpenRouter overlay: point the URLs elsewhere and drop this file.
+#
+# WHY LOCAL RATHER THAN THEIR STAGING: the failure paths are what break integrations — a malformed
+# message, a missing object, a broker that goes away mid-job — and those are close to impossible to
+# rehearse against someone else's environment. Here they are one command each.
+
+services:
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: offline-mom-kafka
+    environment:
+      # Single-node KRaft: no ZooKeeper, no cluster to babysit for a dev dependency.
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    container_name: offline-mom-minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    ports:
+      - "9000:9000"     # S3 API
+      - "9001:9001"     # web console — useful for eyeballing what the pipeline uploaded
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.1
+    container_name: offline-mom-elastic
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false      # dev only; theirs will have auth
+      - ES_JAVA_OPTS=-Xms512m -Xmx1g      # keep it small beside the models
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+
+  # ── Browser UIs, dev only ──────────────────────────────────────────────────
+  # Kafka has no built-in UI and its CLI lives inside the broker container, so without this the
+  # only way to see a message is to exec in and run a console consumer. Being able to watch a job
+  # land on mom.jobs and an ack appear on mom.acks is most of what "understanding the flow" means.
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: offline-mom-kafka-ui
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - DYNAMIC_CONFIG_ENABLED=true
+    ports:
+      - "8090:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # Elasticsearch answers plain HTTP, so a browser can already read it — Kibana is here because
+  # reading a raw _search response is a poor way to understand a mapping you are still designing.
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.1
+    container_name: offline-mom-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - XPACK_SECURITY_ENABLED=false
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+volumes:
+  minio-data:

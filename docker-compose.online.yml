@@ -1,0 +1,55 @@
+# HYBRID MODE — local ASR + diarization, remote MoM writer.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.online.yml up -d \
+#       whisper-server nemo-service llama-service transcribe-api
+#
+# WHY THIS FILE EXISTS AS AN OVERLAY rather than edits to docker-compose.yml: the offline
+# stack is the product. This is a measurement rig for answering "is Llama good enough?"
+# before spending days downloading quantized weights. Keeping it separate means the offline
+# path is never one stale edit away from silently going online — drop the -f and you are
+# back to fully local with no cleanup.
+#
+# WHAT STAYS LOCAL: whisper-server (audio -> text) and nemo-service (who spoke). The audio
+# never leaves the machine. What DOES leave is the finished English transcript, which goes
+# to OpenRouter for the minutes. That is fine for the YouTube test recordings and NOT fine
+# for a real customer meeting.
+#
+# vLLM is simply not started here, which frees the ~72 GB it holds resident.
+
+services:
+  # The offline stack makes these three wait for vLLM so it wins the race for unified memory
+  # (whisper and NeMo used to grab theirs first and starve it). With vLLM out of the picture
+  # there is no race, so the dependency is dropped — otherwise compose blocks forever waiting
+  # on a container that is never coming up.
+  whisper-server:
+    depends_on: []
+
+  nemo-service:
+    depends_on: []
+
+  llama-service:
+    depends_on: []
+    environment:
+      - VLLM_API_BASE=https://openrouter.ai/api/v1
+      - LLM_MODEL_PATH=meta-llama/llama-3.3-70b-instruct
+      # LLM_MODEL_LONG is deliberately UNSET, so every meeting goes to 70B and no routing
+      # happens. Scout was the long-meeting escape hatch for a small context; at 131k that
+      # problem is gone — a 131k window takes ~10 hours of speech in a single pass, and the
+      # longest recording here is 29 minutes. Scout also cannot be served locally at the
+      # precision OpenRouter gives it (109 GB of FP8 weights leaves no room for KV cache
+      # beside whisper and NeMo), so testing on it would measure something this box can
+      # never actually deploy. 70B at FP8 is ~70 GB — the same footprint as gpt-oss today —
+      # which makes these online numbers a fair predictor of the offline build.
+      # Llama does NOT emit reasoning tokens. Without this the budgets are picked by a name
+      # check that only recognises gpt-oss, and every one of them collapses.
+      - LLM_IS_REASONING=false
+      - MODEL_CONTEXT_LIMIT=131072
+      # The key pool variable is named for Groq for historical reasons; it is just
+      # "Authorization: Bearer <key>", which is what OpenRouter wants too.
+      - GROQ_API_KEYS=${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY in .env}
+      # Pin one host. Measured: five identical calls hit Parasail, Crusoe, Novita and
+      # DeepInfra, each with its own quantisation — uncontrolled variance in both output
+      # quality and any accuracy number measured from it.
+      - LLM_PROVIDER_ORDER=DeepInfra
+      - MOM_WINDOW_KEY_POINTS=true
+      - APP_MODE=online

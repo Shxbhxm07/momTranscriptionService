@@ -1,0 +1,36 @@
+# ── secrets ──────────────────────────────────────────────────────────────────
+# .env holds the live OpenRouter key and MinIO credentials. .env.example is the
+# committed template and carries placeholders only.
+.env
+*.pem
+*.key
+
+# ── python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── local data & generated output ────────────────────────────────────────────
+# Audio, generated minutes and scratch results are inputs/outputs, not source.
+*.mp3
+*.wav
+*.m4a
+*.flac
+audio_out/
+*_report.pdf
+*_report.docx
+
+# ── editor / OS ──────────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# LibreOffice/fontconfig cache generated when converting .doc during tests — machine-specific.
+**/.cache/
+
+# Shared by IAF as a reference for their model-calling pattern. Another team's code, and it names
+# their internal WatsonX host — not ours to publish.
+query_enhancement*.py
