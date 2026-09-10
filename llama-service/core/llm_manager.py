@@ -269,7 +269,13 @@ class LLMManager:
                 logger.info(f"[GroqPool] Using key #{key_idx} (...{key[-4:]})")
                 response = self.client.post(url, json=payload, headers={"Authorization": f"Bearer {key}"})
                 response.raise_for_status()
-                msg = response.json()["choices"][0]["message"]
+                choice = response.json()["choices"][0]
+                msg = choice["message"]
+                if choice.get("finish_reason") == "length":
+                    # A cut-off reply used to pass through as if it were complete, and a JSON caller then
+                    # saw only a parse error. Say so here, where the cause is actually known.
+                    logger.warning(f"[LLM] reply hit max_tokens={payload['max_tokens']} and was cut off — "
+                                   f"output is incomplete")
                 content = msg.get("content")
                 if content is None:
                     # gpt-oss-120b is a REASONING model: it can spend its ENTIRE output budget on internal
@@ -1178,20 +1184,52 @@ class LLMManager:
                 logger.info(f"[MOM]   ✗ {t[:70]!r} — quote not in transcript: {q[:50]!r}")
         return kept
 
+    # Second attempt for a window whose schema-constrained reply failed. Strict JSON-schema decoding can
+    # trap the model in whitespace — JSON allows it anywhere, so it can emit it until max_tokens. Measured
+    # 2026-09-10 on Town Council: two windows returned ~130 characters after spending all 1500 tokens,
+    # 3 times out of 3, so repeating the same request never helped and half the meeting's windows were
+    # lost. json_object keeps the reply valid JSON without a schema to trap on: on the same two windows
+    # it finished normally both times, returning a bare array of complete points (_parse_points takes
+    # that shape). Only a window that already failed ever reaches this, so it cannot make a good window
+    # worse.
+    _WINDOW_FALLBACK_FORMAT = {"response_format": {"type": "json_object"}}
+
     @staticmethod
     def _parse_points(raw, i, total):
         """Parse a window response, falling back to the deterministic repairs already in the
         renderer before declaring the slice lost."""
         from localization.mom_i18n import _extract_json, _repair_json
-        for attempt, parse in (("direct", json.loads), ("extract", _extract_json), ("repair", _repair_json)):
+
+        def objects(text):
+            # Last resort: every complete {...} carrying a "text" key, wherever it sits. Without the
+            # schema the model was measured to answer "Here are the extracted points:\n\n1. {...}\n\n
+            # 2. {...}" — each object whole, the document not JSON. Anything invented is still removed
+            # by _ground_points, whose quote must occur verbatim in the transcript.
+            dec, found, k = json.JSONDecoder(), [], 0
+            while (j := text.find("{", k)) >= 0:
+                try:
+                    obj, k = dec.raw_decode(text, j)
+                    if isinstance(obj, dict) and obj.get("text"):
+                        found.append(obj)
+                except ValueError:
+                    k = j + 1
+            if not found:
+                raise ValueError("no complete point objects")
+            return found
+
+        for attempt, parse in (("direct", json.loads), ("extract", _extract_json), ("repair", _repair_json),
+                               ("objects", objects)):
             try:
                 data = parse(raw)
             except Exception:
                 continue
-            if isinstance(data, dict) and isinstance(data.get("points"), list):
+            points = (data.get("points") if isinstance(data, dict)
+                      else data if isinstance(data, list) and all(isinstance(x, dict) for x in data)
+                      else None)
+            if isinstance(points, list):
                 if attempt != "direct":
                     logger.info(f"[MOM] window {i+1}/{total} needed {attempt} to parse")
-                return data["points"]
+                return points
         raise ValueError("no points array in response")
 
     def _extract_windows(self, transcript, temperature, route=None):
@@ -1214,20 +1252,21 @@ class LLMManager:
             # PROVIDER and some treat it as a strong hint, so it still arrives. A second sample
             # almost always parses; if it does not, the log says so at ERROR naming the section,
             # because silent partial coverage is the worst outcome here.
-            for attempt in (1, 2):
+            schema = {"response_format": {"type": "json_schema", "json_schema": {
+                "name": "points", "strict": True, "schema": self._POINT_SCHEMA}}}
+            for attempt, extra in ((1, schema), (2, self._WINDOW_FALLBACK_FORMAT)):
                 try:
                     out = self.generate(
                         WINDOW_EXTRACTION_PROMPT,
                         f"SECTION {i+1} OF {len(wins)}:\n─────\n{w}\n─────\n\nExtract every point.",
                         MAX_NEW_TOKENS_EXTRACTION, temperature,
                         model=route.get("model"), api_base=route.get("api_base"),
-                        extra={"response_format": {"type": "json_schema", "json_schema": {
-                            "name": "points", "strict": True, "schema": self._POINT_SCHEMA}}},
+                        extra=extra,
                     )
                     return self._parse_points(out, i, len(wins))
                 except Exception as e:
                     if attempt == 1:
-                        logger.warning(f"[MOM] window {i+1}/{len(wins)} failed ({e!r}) — retrying")
+                        logger.warning(f"[MOM] window {i+1}/{len(wins)} failed ({e!r}) — retrying without the JSON schema")
                     else:
                         logger.error(f"[MOM] window {i+1}/{len(wins)} LOST after retry ({e!r}) — "
                                      f"~{len(w)} chars of this meeting are not represented")
