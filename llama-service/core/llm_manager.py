@@ -986,34 +986,25 @@ class LLMManager:
         return f"speaker_{m.group(1)}" if m else s
 
     def _reconcile_attendees(self, content, transcript):
-        """Make ATTENDEES agree with the people who actually spoke.
+        """Remove attendees the transcript cannot support — WITHOUT pairing names to speaker labels.
 
-        The prompt already says one attendee per speaker tag; the model does not reliably obey
-        it, and attendees is the weakest-scoring field. The tags are ground truth — diarization
-        found those voices, and a name only replaces [Speaker_N] after apply_speaker_names has
-        verified it in the transcript — so this is enforced in code, the pattern that has worked
-        here where prompt rules have not:
-          • a named speaker the model left out is added; an anonymous [Speaker_N] is added only
-            when attendees are fewer than voices (its owner is often listed by real name)
-          • one attendee per speaker — a second entry for the same voice is dropped
-          • a [Speaker_N] that no line carries is an invented voice and is dropped
-          • a named person who never spoke but IS mentioned is kept: introduced or present
-            people are real attendees. Only a name found nowhere in the transcript is dropped.
-        Matching is by tokens, so "Mayor Pro Tem Jason Serbu" still claims the tag [Jason Serbu].
+        An earlier version matched each attendee to a speaker label, added labels nobody claimed and
+        dropped "duplicates". Measured 2026-09-10 on Town Council it did damage twice: first it added
+        four anonymous voices that were council members already listed by name; then, when speaker
+        naming put titles into the labels ("Council Member Stephanie Miller"), a label's first word
+        matched every council member and three real members plus the Mayor Pro Tem were deleted.
+        Titles, spellings ("Laces" / "Lasis" / "Placis") and word order vary too much for a label to
+        be paired with a name reliably, and the case it existed for — an introduction Whisper never
+        transcribed — is fixed upstream by the re-transcription check. So only rules that need no
+        pairing remain:
+          • a [Speaker_N] that no transcript line carries is an invented voice — dropped
+          • a person whose name occurs nowhere in the transcript — dropped
         """
-        tags = list(dict.fromkeys(t.strip() for t in self._LINE_TAG_RE.findall(transcript or "") if t.strip()))
+        tags = {self._attendee_key(t) for t in self._LINE_TAG_RE.findall(transcript or "") if t.strip()}
         if not tags:
-            return content                  # no diarization → nothing to reconcile against
+            return content                  # no diarization → nothing to check against
         low = (transcript or "").lower()
-        tag_keys = {self._attendee_key(t): t for t in tags}
-
-        def claims(tag_key, name_key):
-            if tag_key.startswith("speaker_"):
-                return tag_key == name_key
-            toks, tt = set(name_key.split()), tag_key.split()
-            return set(tt) <= toks or tt[0] in toks
-
-        kept, dropped, matched = [], [], set()
+        kept, dropped = [], []
         for a in content.get("attendees") or []:
             if not isinstance(a, dict):
                 continue
@@ -1021,34 +1012,17 @@ class LLMManager:
             k = self._attendee_key(name)
             if not k:
                 continue
-            hit = next((tk for tk in tag_keys if tk not in matched and claims(tk, k)), None)
-            if hit:
-                matched.add(hit); kept.append(a)
-            elif any(claims(tk, k) for tk in matched) or k.startswith("speaker_"):
-                dropped.append(name)        # duplicate of a matched voice, or a voice that does not exist
-            elif re.search(rf"\b{re.escape(k.split()[0])}\b", low):
-                kept.append(a)              # mentioned though not tagged — present, not speaking
+            if k.startswith("speaker_"):
+                (kept if k in tags else dropped).append(a if k in tags else name)
+            # ANY word of the name, not the first: in "Council Member Jen Cowish" the first word is a
+            # title that is spoken all meeting, which made the check meaningless for titled names. Any
+            # word also survives the model repairing a spelling ("Craycraft" for "Kracraft").
+            elif any(re.search(rf"\b{re.escape(t)}\b", low) for t in k.split() if len(t) >= 3):
+                kept.append(a)
             else:
-                dropped.append(name)        # named nowhere in the transcript
-        # A missing NAMED voice is unambiguous — the model left that person out, so add them. A missing
-        # [Speaker_N] is not: its owner is usually already listed under their real name from a roll
-        # call or an introduction. Measured 2026-09-10 on Town Council: the model listed all nine
-        # members by name, 4 of the 7 voices stayed anonymous, and adding those 4 tags invented four
-        # duplicate attendees. So anonymous voices only fill a real shortfall — fewer attendees than
-        # voices — in tag order.
-        added = []
-        for tk, t in tag_keys.items():
-            if tk not in matched and not tk.startswith("speaker_"):
-                kept.append({"name": t, "role": "Unknown"}); added.append(t)
-        shortfall = len(tag_keys) - len(kept)
-        for tk, t in tag_keys.items():
-            if shortfall <= 0:
-                break
-            if tk not in matched and tk.startswith("speaker_"):
-                kept.append({"name": f"[{t}]", "role": "Unknown"}); added.append(f"[{t}]"); shortfall -= 1
-        if added or dropped:
-            logger.info(f"[MOM] ATTENDEES reconciled with {len(tags)} speaker tag(s): "
-                        f"added {added or 'none'}, dropped {dropped or 'none'}")
+                dropped.append(name)
+        if dropped:
+            logger.info(f"[MOM] ATTENDEES: dropped {len(dropped)} unsupported: {dropped}")
         content["attendees"] = kept
         return content
 
