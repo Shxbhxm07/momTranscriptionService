@@ -110,6 +110,11 @@ services:
     image: offline-mom-api:latest
     container_name: offline-mom-consumer
     command: ["python", "/app/consumer.py"]
+    # The API image carries a HEALTHCHECK that curls its own web server. This service runs no web
+    # server, so that probe can never pass and the container reports "unhealthy" while working
+    # perfectly — misleading in `docker ps` and enough to trip an orchestrator's restart policy.
+    healthcheck:
+      disable: true
     environment:
       - KAFKA_BOOTSTRAP=kafka:9092
       - KAFKA_JOB_TOPIC=mom.jobs

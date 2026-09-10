@@ -118,4 +118,9 @@ MOM_WINDOW_KEY_POINTS = os.getenv("MOM_WINDOW_KEY_POINTS", "true").lower() == "t
 # 2, not 4: four concurrent window calls tripped OpenRouter's rate limit, the 429 exhausted its
 # retries, and the whole request fell through to the legacy pipeline — which returns no
 # structured content, so every field came back empty. Throughput is not worth that failure mode.
-WINDOW_CONCURRENCY = int(os.getenv("WINDOW_CONCURRENCY", "2"))
+# How many model calls may be in flight at once. The limit is the PROVIDER'S rate limit, not this
+# box — four concurrent calls tripped OpenRouter's 429, the retries were exhausted and the whole
+# request fell through to the legacy pipeline. Shared by every independent-call stage: window
+# extraction and transcript correction.
+LLM_CONCURRENCY = int(os.getenv("LLM_CONCURRENCY", os.getenv("WINDOW_CONCURRENCY", "2")))
+WINDOW_CONCURRENCY = LLM_CONCURRENCY   # kept for the existing name

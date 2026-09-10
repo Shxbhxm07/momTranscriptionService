@@ -9,7 +9,8 @@ from config import (APP_MODE, LLM_MODEL_PATH, VLLM_API_BASE, MAX_INPUT_TOKENS,
                     MAX_NEW_TOKENS_PER_CHUNK, MAX_NEW_TOKENS_SYNTHESIS, MODEL_CONTEXT_LIMIT,
                     MAX_NEW_TOKENS_EXTRACTION, MAX_NEW_TOKENS_CLASSIFY,
                     LLM_MODEL_LONG, VLLM_API_BASE_LONG, LLM_LONG_THRESHOLD_TOKENS,
-                    MODEL_CONTEXT_LIMIT_LONG, LLM_PROVIDER_ORDER, MOM_WINDOW_KEY_POINTS, WINDOW_CONCURRENCY)
+                    MODEL_CONTEXT_LIMIT_LONG, LLM_PROVIDER_ORDER, MOM_WINDOW_KEY_POINTS, WINDOW_CONCURRENCY,
+                    LLM_CONCURRENCY)
 from core.groq_key_pool import load_pool_from_env
 from core.translation_validator import validate_translation
 from prompts import MEETING_ANALYSIS_PROMPT, SYNTHESIS_PROMPT, MEETING_ANALYSIS_PROMPT_JSON, SYNTHESIS_PROMPT_JSON, SPEAKER_MAPPING_PROMPT, DECISIONS_EXTRACTION_PROMPT, KEY_POINTS_EXTRACTION_PROMPT, WINDOW_EXTRACTION_PROMPT, SUMMARY_FROM_POINTS_PROMPT, FIGURES_EXTRACTION_PROMPT, TRANSCRIPT_CORRECTION_PROMPT, TRANSLATED_TRANSCRIPT_CORRECTION_PROMPT, ACTION_ITEMS_EXTRACTION_PROMPT, MEETING_TYPE_CLASSIFY_PROMPT, TEMPLATE_FOCUS
@@ -686,7 +687,10 @@ class LLMManager:
         try:
             return self._generate_mom_json(text, temperature, output_lang, metadata)
         except Exception as e:
-            logger.warning(f"[MOM] Falling back to legacy pipeline (reason={e!r})")
+            # ERROR, not WARNING: the legacy pipeline returns no structured `content`, so this
+            # degrades the .docx and the Elasticsearch document to prose only. It must stand out.
+            logger.error(f"[MOM] Falling back to legacy pipeline (reason={e!r}) — "
+                         f"this MoM will have NO structured decisions/action items")
             return self._generate_mom_legacy(text, temperature, output_lang)
 
     # ── NEW JSON pipeline ────────────────────────────────────────────────────
@@ -1077,6 +1081,22 @@ class LLMManager:
                 logger.info(f"[MOM]   ✗ {t[:70]!r} — quote not in transcript: {q[:50]!r}")
         return kept
 
+    @staticmethod
+    def _parse_points(raw, i, total):
+        """Parse a window response, falling back to the deterministic repairs already in the
+        renderer before declaring the slice lost."""
+        from localization.mom_i18n import _extract_json, _repair_json
+        for attempt, parse in (("direct", json.loads), ("extract", _extract_json), ("repair", _repair_json)):
+            try:
+                data = parse(raw)
+            except Exception:
+                continue
+            if isinstance(data, dict) and isinstance(data.get("points"), list):
+                if attempt != "direct":
+                    logger.info(f"[MOM] window {i+1}/{total} needed {attempt} to parse")
+                return data["points"]
+        raise ValueError("no points array in response")
+
     def _extract_windows(self, transcript, temperature, route=None):
         """Read the transcript in overlapping windows and return grounded, deduped points.
 
@@ -1091,19 +1111,30 @@ class LLMManager:
         logger.info(f"[MOM] WINDOW EXTRACTION — {len(wins)} window(s) of ~{self._WINDOW_CHARS} chars")
         def _one(i_w):
             i, w = i_w
-            try:
-                out = self.generate(
-                    WINDOW_EXTRACTION_PROMPT,
-                    f"SECTION {i+1} OF {len(wins)}:\n─────\n{w}\n─────\n\nExtract every point.",
-                    MAX_NEW_TOKENS_EXTRACTION, temperature,
-                    model=route.get("model"), api_base=route.get("api_base"),
-                    extra={"response_format": {"type": "json_schema", "json_schema": {
-                        "name": "points", "strict": True, "schema": self._POINT_SCHEMA}}},
-                )
-                return (json.loads(out) or {}).get("points") or []
-            except Exception as e:
-                logger.warning(f"[MOM] window {i+1}/{len(wins)} failed ({e!r}) — continuing")
-                return []
+            # TWO ATTEMPTS. A window that returns nothing takes its whole slice of the meeting
+            # with it, and until now that showed up as a single WARNING line. Structured outputs
+            # are meant to make malformed JSON impossible, but OpenRouter enforces the schema PER
+            # PROVIDER and some treat it as a strong hint, so it still arrives. A second sample
+            # almost always parses; if it does not, the log says so at ERROR naming the section,
+            # because silent partial coverage is the worst outcome here.
+            for attempt in (1, 2):
+                try:
+                    out = self.generate(
+                        WINDOW_EXTRACTION_PROMPT,
+                        f"SECTION {i+1} OF {len(wins)}:\n─────\n{w}\n─────\n\nExtract every point.",
+                        MAX_NEW_TOKENS_EXTRACTION, temperature,
+                        model=route.get("model"), api_base=route.get("api_base"),
+                        extra={"response_format": {"type": "json_schema", "json_schema": {
+                            "name": "points", "strict": True, "schema": self._POINT_SCHEMA}}},
+                    )
+                    return self._parse_points(out, i, len(wins))
+                except Exception as e:
+                    if attempt == 1:
+                        logger.warning(f"[MOM] window {i+1}/{len(wins)} failed ({e!r}) — retrying")
+                    else:
+                        logger.error(f"[MOM] window {i+1}/{len(wins)} LOST after retry ({e!r}) — "
+                                     f"~{len(w)} chars of this meeting are not represented")
+            return []
 
         # Windows are independent, so run them together. Sequentially this pass took 776s on a
         # 9-minute meeting against 189s for the whole previous pipeline; the work is all latency,
@@ -2037,14 +2068,24 @@ class LLMManager:
             logger.info(f"[CORRECT] ✓ Done single-pass ({len(corrected)} chars)")
             return corrected
 
-        logger.info(f"[CORRECT] Chunked: {len(chunks)} chunks")
-        corrected_chunks = []
-        for i, chunk in enumerate(chunks):
+        # RUN THE CHUNKS TOGETHER. They are independent slices of one transcript and are rejoined
+        # in order, so nothing about correcting them depends on sequence. Sequentially this stage
+        # was both the slowest in the pipeline and a latent failure: at ~60s per 4000-char chunk a
+        # 90-minute meeting needs ~15 chunks, which exceeds the caller's 900s REFINE_TIMEOUT — and
+        # because correction degrades silently to the raw transcript, the only symptom would be
+        # ASR garble surviving into the minutes of exactly the longest meetings.
+        # pool.map preserves input order, so the rejoin below is unaffected.
+        logger.info(f"[CORRECT] Chunked: {len(chunks)} chunks, {LLM_CONCURRENCY} at a time")
+
+        def _one(i_chunk):
+            i, chunk = i_chunk
             logger.info(f"[CORRECT] Chunk {i+1}/{len(chunks)} ({len(chunk)} chars)")
-            corrected_chunk = self._corrected_or_original(
-                self.generate(prompt, f"TRANSCRIPT:\n\n{chunk}", max_output, temperature), chunk, f"chunk {i+1}"
-            )
-            corrected_chunks.append(corrected_chunk)
+            return self._corrected_or_original(
+                self.generate(prompt, f"TRANSCRIPT:\n\n{chunk}", max_output, temperature),
+                chunk, f"chunk {i+1}")
+
+        with ThreadPoolExecutor(max_workers=LLM_CONCURRENCY) as pool:
+            corrected_chunks = list(pool.map(_one, enumerate(chunks)))
 
         corrected = '\n'.join(corrected_chunks)
         self._maybe_learn_terms(_tier1_input, corrected)

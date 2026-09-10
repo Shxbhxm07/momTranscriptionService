@@ -89,8 +89,21 @@ def _is_remote(api_base: str) -> bool:
         return True          # a public DNS name → remote
 
 
+# WHY THESE HANDLERS ARE SYNC `def`, NOT `async def`
+# Every llm_manager call below is blocking: httpx sync client, plus ThreadPoolExecutor joins for
+# the windowed passes. In FastAPI a blocking call inside `async def` runs ON the event loop and
+# freezes the whole process — measured 2026-09-10, an 18-minute /summarize made the container
+# answer nothing at all, and its own "/" healthcheck timed out 16 times in a row and marked it
+# unhealthy while the job was in fact running fine.
+# A plain `def` handler is run by FastAPI in the anyio worker threadpool instead, so the loop
+# stays free to serve "/" and the probes. This matters most in the client's OpenShift deployment:
+# Docker's `restart: unless-stopped` ignores health, but a Kubernetes liveness probe does not —
+# it would kill the pod mid-meeting, every meeting.
+# Keep `async def` only for handlers that await (`/translate`, `/translate_batch`) or do no
+# blocking work (`/`, `/summarize/stream`, which hands Starlette a sync generator).
+
 @app.get("/health")
-async def health():
+def health():
     # Reports WHICH backend this service resolved to, not just whether it answered. Cloud-vs-local
     # is derived from VLLM_API_BASE alone (config.py), so there is no flag to read back — without
     # this, "am I on Groq or the local vLLM?" can only be answered by reading pod environment
@@ -115,7 +128,7 @@ async def health():
     }
 
 @app.post("/summarize")
-async def summarize(request: SummarizeRequest):
+def summarize(request: SummarizeRequest):
     try:
         return llm_manager.generate_mom(request.text, request.temperature, request.output_lang, request.metadata)
     except Exception as e:
@@ -125,7 +138,7 @@ async def summarize(request: SummarizeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/localize-mom")
-async def localize_mom(request: LocalizeMomRequest):
+def localize_mom(request: LocalizeMomRequest):
     """Design 2: localize an already-generated English MoM `content` (structured) into target_lang —
     translate content values + render config-driven labels. Lets the backend cache the English content
     once and localize per language."""
@@ -151,7 +164,7 @@ async def summarize_stream(request: SummarizeRequest):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 @app.post("/translate-mom")
-async def translate_mom(request: TranslateMomRequest):
+def translate_mom(request: TranslateMomRequest):
     """Translate a FINISHED English MoM into target_lang (structure-preserving). Lets the caller
     translate a cached English base into any language without re-generating the MoM."""
     try:
@@ -162,7 +175,7 @@ async def translate_mom(request: TranslateMomRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/summarize_test")
-async def summarize_test(text:str,temperature: float = 0.05):
+def summarize_test(text:str,temperature: float = 0.05):
     try:
         return llm_manager.generate_mom(text, temperature)
     except Exception as e:
@@ -173,7 +186,7 @@ async def summarize_test(text:str,temperature: float = 0.05):
 
 
 @app.post("/identify-speakers")
-async def identify_speakers(request: SpeakerMapRequest):
+def identify_speakers(request: SpeakerMapRequest):
     try:
         return llm_manager.identify_speakers(request.text, request.temperature)
     except Exception as e:
@@ -183,7 +196,7 @@ async def identify_speakers(request: SpeakerMapRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/correct-transcript")
-async def correct_transcript(request: CorrectTranscriptRequest):
+def correct_transcript(request: CorrectTranscriptRequest):
     try:
         corrected = llm_manager.correct_transcript(request.text, request.temperature, request.mode, request.known_names)
         return {"corrected_text": corrected}

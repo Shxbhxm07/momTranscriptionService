@@ -306,13 +306,32 @@ def to_mom_response(result: Dict[str, Any]) -> Dict[str, Any]:
             parsed = _split_owner_due(item.strip())
             action_items.append({**parsed, "assigned_by": ""})
 
+    # DEGRADED MODE. llama-service's legacy fallback pipeline (and any future path that loses
+    # `content`) returns only rendered text — no structured object. Everything downstream reads
+    # the structured fields ONLY: build_mom_docx writes its sections from them, and index_mom
+    # indexes them. So an empty `content` used to produce a .docx in MinIO that was a shell of
+    # empty headings and an Elasticsearch document with nothing in it — while the Kafka ack still
+    # said SUCCESS. A silent empty deliverable is worse than a visible failure.
+    #
+    # The rendered minutes are right there in `analysis`, so when there is no structure to report,
+    # the prose becomes the summary. Nothing is invented: decisions and action items stay empty
+    # because none were extracted, which is the truth.
+    formatted = result.get("analysis", "") or ""
+    summary = content.get("summary", "") or ""
+    if formatted.strip() and not summary.strip() and not any(
+        content.get(k) for k in ("key_points", "decisions", "action_items",
+                                 "agenda", "key_figures", "speaker_notes")):
+        logger.warning("[MOM] no structured content — falling back to the rendered document "
+                       f"as the summary ({len(formatted)} chars); decisions/action items are empty")
+        summary = formatted
+
     return {
         # ── the contract ──
         # `title` is llama-service's header.topic — the 3–6 word plain-language meeting
         # title its prompt already produces. Renamed here to match this API's contract
         # rather than adding a second title-generation step.
         "title": header.get("topic", "") or "",
-        "summary": content.get("summary", "") or "",
+        "summary": summary,
         "key_points": _key_points(content),
         "decisions": [d for d in _as_list(content.get("decisions")) if isinstance(d, str) and d.strip()],
         "action_items": action_items,
@@ -328,5 +347,5 @@ def to_mom_response(result: Dict[str, Any]) -> Dict[str, Any]:
         # The fully rendered, human-readable minutes document (headings, bullets, footer).
         # This is what the MoM product actually showed users; keeping it means a caller can
         # display finished minutes without re-assembling them from the fields above.
-        "formatted": result.get("analysis", "") or "",
+        "formatted": formatted,
     }
