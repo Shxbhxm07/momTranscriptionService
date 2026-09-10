@@ -1,6 +1,7 @@
 import logging
 import httpx
 import json
+import math
 import re
 from concurrent.futures import ThreadPoolExecutor
 import time
@@ -686,6 +687,8 @@ class LLMManager:
 
         yield f"data: {json.dumps({'done': True, 'analysis': filled, 'summary': filled})}\n\n"
 
+    _PIPELINE_RETRY_WAIT = 20      # seconds; long enough for a provider rate limit to clear
+
     def generate_mom(self, text: str, temperature: float, output_lang: str = "English", metadata: dict = None) -> dict:
         """Entry point (Stage 3): try the new JSON pipeline; on ANY failure fall back to the legacy
         text pipeline so the MoM endpoint never crashes. `metadata` (date/time/venue) is passed through
@@ -693,11 +696,23 @@ class LLMManager:
         try:
             return self._generate_mom_json(text, temperature, output_lang, metadata)
         except Exception as e:
-            # ERROR, not WARNING: the legacy pipeline returns no structured `content`, so this
-            # degrades the .docx and the Elasticsearch document to prose only. It must stand out.
-            logger.error(f"[MOM] Falling back to legacy pipeline (reason={e!r}) — "
-                         f"this MoM will have NO structured decisions/action items")
-            return self._generate_mom_legacy(text, temperature, output_lang)
+            # ONE RETRY BEFORE THE LEGACY PIPELINE. Measured 2026-09-10: a single 429 from the
+            # provider threw the entire structured pipeline away, and that run reached the user with
+            # no attendees, decisions or action items at all — the legacy path returns rendered prose
+            # and no `content`. A transient rate limit should cost a minute, not the whole structured
+            # document. The pipeline is not resumable, so this repeats it; that only happens on a
+            # failure, and losing every structured field is far more expensive.
+            logger.warning(f"[MOM] JSON pipeline failed ({e!r}) — waiting {self._PIPELINE_RETRY_WAIT}s "
+                           f"and trying once more before the legacy fallback")
+            time.sleep(self._PIPELINE_RETRY_WAIT)
+            try:
+                return self._generate_mom_json(text, temperature, output_lang, metadata)
+            except Exception as e2:
+                # ERROR, not WARNING: the legacy pipeline returns no structured `content`, so this
+                # degrades the .docx and the Elasticsearch document to prose only. It must stand out.
+                logger.error(f"[MOM] Falling back to legacy pipeline (reason={e2!r}) — "
+                             f"this MoM will have NO structured decisions/action items")
+                return self._generate_mom_legacy(text, temperature, output_lang)
 
     # ── NEW JSON pipeline ────────────────────────────────────────────────────
     def _generate_mom_json(self, text, temperature, output_lang="English", metadata=None):
@@ -1656,7 +1671,12 @@ class LLMManager:
             if not other:
                 continue
             overlap = len(terms & other)
-            if overlap >= max(3, int(min(len(terms), len(other)) * cls._RESTATEMENT_RATIO)):
+            # Against the LONGER text, and rounded UP. Measured against the shorter one, a short task
+            # sitting inside a longer decision counted as a restatement and was deleted: 2026-09-10
+            # this threw away 7 of 19 real LEP tasks ("Send the I Speak guides to Culp", "Remediate
+            # the website and forms by April") and 4 of 7 on Package Team. Minutes legitimately carry
+            # a decision and the task it creates; only a near word-for-word repeat is a restatement.
+            if overlap >= max(3, math.ceil(max(len(terms), len(other)) * cls._RESTATEMENT_RATIO)):
                 return True
         return False
 
