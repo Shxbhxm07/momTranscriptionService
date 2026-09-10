@@ -993,7 +993,8 @@ class LLMManager:
         found those voices, and a name only replaces [Speaker_N] after apply_speaker_names has
         verified it in the transcript — so this is enforced in code, the pattern that has worked
         here where prompt rules have not:
-          • every speaker tag gets an attendee (added with an empty role if the model left it out)
+          • a named speaker the model left out is added; an anonymous [Speaker_N] is added only
+            when attendees are fewer than voices (its owner is often listed by real name)
           • one attendee per speaker — a second entry for the same voice is dropped
           • a [Speaker_N] that no line carries is an invented voice and is dropped
           • a named person who never spoke but IS mentioned is kept: introduced or present
@@ -1029,11 +1030,22 @@ class LLMManager:
                 kept.append(a)              # mentioned though not tagged — present, not speaking
             else:
                 dropped.append(name)        # named nowhere in the transcript
+        # A missing NAMED voice is unambiguous — the model left that person out, so add them. A missing
+        # [Speaker_N] is not: its owner is usually already listed under their real name from a roll
+        # call or an introduction. Measured 2026-09-10 on Town Council: the model listed all nine
+        # members by name, 4 of the 7 voices stayed anonymous, and adding those 4 tags invented four
+        # duplicate attendees. So anonymous voices only fill a real shortfall — fewer attendees than
+        # voices — in tag order.
         added = []
         for tk, t in tag_keys.items():
-            if tk not in matched:
-                disp = f"[{t}]" if tk.startswith("speaker_") else t
-                kept.append({"name": disp, "role": "Unknown"}); added.append(disp)
+            if tk not in matched and not tk.startswith("speaker_"):
+                kept.append({"name": t, "role": "Unknown"}); added.append(t)
+        shortfall = len(tag_keys) - len(kept)
+        for tk, t in tag_keys.items():
+            if shortfall <= 0:
+                break
+            if tk not in matched and tk.startswith("speaker_"):
+                kept.append({"name": f"[{t}]", "role": "Unknown"}); added.append(f"[{t}]"); shortfall -= 1
         if added or dropped:
             logger.info(f"[MOM] ATTENDEES reconciled with {len(tags)} speaker tag(s): "
                         f"added {added or 'none'}, dropped {dropped or 'none'}")
