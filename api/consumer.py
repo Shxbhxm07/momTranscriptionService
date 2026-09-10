@@ -10,11 +10,17 @@ concurrent request with 503 rather than queueing it — measured twice, once by 
 two jobs at once. So max_poll_records=1 and no worker pool: throughput here is bounded by the GPU,
 not by the consumer.
 
-THE POLL-INTERVAL TRAP. A meeting takes 6-10 minutes to process and Kafka's default
-max_poll_interval_ms is 5 minutes. Left alone the broker decides this consumer has died, ejects it
-mid-job and hands the message to someone else — every meeting processed twice, visible only on the
-bill. The interval below is raised past the worst case, and the Elasticsearch write is idempotent
-on a stable document id so a genuine redelivery overwrites instead of duplicating.
+THE POLL-INTERVAL TRAP. Kafka ejects a consumer that has not called poll() within
+max_poll_interval_ms. The first fix raised that interval "past the worst case" (20 min), and the
+worst case was wrong: measured 2026-09-10, a 29-minute meeting on a slow provider day took 22 min.
+The consumer was ejected at minute 20, sent its SUCCESS ack, crashed on the offset commit, restarted
+and processed the same meeting again — and would have looped forever, re-acking and re-billing on
+every pass. No fixed interval is safe when a two-hour meeting is a normal input.
+
+So the job runs on a worker thread while this thread keeps calling poll() with the partition
+paused. A paused poll() returns nothing, but it proves the consumer is alive: a job can take as long
+as it needs, and a dead process is still noticed within the session timeout. The Elasticsearch write
+stays idempotent on a stable document id, so a genuine redelivery overwrites instead of duplicating.
 """
 import hashlib
 import json
@@ -22,9 +28,11 @@ import logging
 import signal
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from kafka import KafkaConsumer, KafkaProducer
+from kafka.errors import CommitFailedError
 
 sys.path.insert(0, "/app")
 from config import (KAFKA_ACK_TOPIC, KAFKA_BOOTSTRAP, KAFKA_GROUP_ID,  # noqa: E402
@@ -103,8 +111,9 @@ def main():
     logger.info(f"listening on {KAFKA_JOB_TOPIC!r} → acking to {KAFKA_ACK_TOPIC!r} "
                 f"(group={KAFKA_GROUP_ID}, poll interval {KAFKA_MAX_POLL_INTERVAL_MS/60000:.0f}m)")
 
+    worker = ThreadPoolExecutor(max_workers=1)
     while _running:
-        for _tp, records in (consumer.poll(timeout_ms=5000) or {}).items():
+        for tp, records in (consumer.poll(timeout_ms=5000) or {}).items():
             for rec in records:
                 try:
                     job = parse_job(rec.value)
@@ -115,12 +124,25 @@ def main():
                     consumer.commit()
                     continue
                 logger.info(f"[JOB {job.conversation_id}] received at offset {rec.offset}")
-                ack = process(job, store, index)
+                consumer.pause(tp)
+                pending = worker.submit(process, job, store, index)
+                while not pending.done():
+                    consumer.poll(timeout_ms=1000)   # paused → no records, but keeps the membership alive
+                consumer.resume(tp)
+                ack = pending.result()               # process() never raises
                 producer.send(KAFKA_ACK_TOPIC, ack)
                 producer.flush()
-                consumer.commit()
-                logger.info(f"[JOB {job.conversation_id}] acked {ack['message']}, offset committed")
+                try:
+                    consumer.commit()
+                    logger.info(f"[JOB {job.conversation_id}] acked {ack['message']}, offset committed")
+                except CommitFailedError as e:
+                    # Should not happen now that the loop keeps polling. But an uncaught failure here
+                    # is exactly what turned one slow job into an endless reprocess loop, so log it
+                    # and carry on: the job is redelivered once, and Elasticsearch overwrites.
+                    logger.error(f"[JOB {job.conversation_id}] acked {ack['message']} but the offset commit "
+                                 f"failed ({type(e).__name__}) — Kafka will redeliver this job once")
 
+    worker.shutdown(wait=True)
     consumer.close(); producer.close()
     logger.info("stopped cleanly")
 
