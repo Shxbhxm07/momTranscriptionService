@@ -94,6 +94,16 @@ ENABLE_NOISE_REDUCTION = os.getenv("ENABLE_NOISE_REDUCTION", "false").lower() ==
 # file pipeline. See the limitation note in README.md before turning it off.
 FILTER_HALLUCINATIONS = os.getenv("FILTER_HALLUCINATIONS", "true").lower() == "true"
 
+# Re-transcribe ONCE when Whisper skipped too much speech. whisper.cpp occasionally falls into a
+# degenerate state for minutes at a time and leaves a hole in every 30 s window. Measured
+# 2026-09-10, four runs of one 29-minute meeting: diarized speech falling in Whisper's gaps was
+# 5.3 s, 7.5 s and 18.6 s on the good runs and 154.3 s on the bad one — which lost an attendee's
+# self-introduction outright. The limit is the larger of the two values below: 45 s sits 2.4x
+# above the worst good run and 3.4x below the bad one.
+ENABLE_TRANSCRIBE_RETRY = os.getenv("ENABLE_TRANSCRIBE_RETRY", "true").lower() == "true"
+TRANSCRIBE_RETRY_LOST_S = float(os.getenv("TRANSCRIBE_RETRY_LOST_S", "45"))
+TRANSCRIBE_RETRY_LOST_FRACTION = float(os.getenv("TRANSCRIBE_RETRY_LOST_FRACTION", "0.02"))
+
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "500"))
 
 # ── document translation (Hindi ⇄ English) ───────────────────────────────────

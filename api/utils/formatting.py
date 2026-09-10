@@ -183,6 +183,23 @@ def label_transcript(segments: List[dict], speaker_segments: List[dict]) -> Tupl
 # bracketed name as confirmed. So every name has to earn its way in, and the default is to
 # keep the tag.
 
+def speech_in_gaps(segments: List[dict], speaker_segments: List[dict], min_gap: float = 2.0) -> float:
+    """Seconds of diarized speech that fall in the holes between transcript segments.
+
+    NeMo and Whisper listen to the same audio independently, so a stretch where NeMo hears
+    someone talking and Whisper wrote nothing is speech Whisper skipped — not silence, which
+    both agree on. Gaps shorter than `min_gap` are ordinary inter-segment spacing and ignored.
+    """
+    speech = sorted((float(t.get("start", 0.0)), float(t.get("end", 0.0))) for t in speaker_segments or [])
+    lost = 0.0
+    for a, b in zip(segments, segments[1:]):
+        g0, g1 = float(a.get("end", 0.0)), float(b.get("start", 0.0))
+        if g1 - g0 < min_gap:
+            continue
+        lost += sum(max(0.0, min(g1, e) - max(g0, s)) for s, e in speech)
+    return lost
+
+
 _TAG_RE = re.compile(r"\[(Speaker_\d+)\]")
 _PLACEHOLDER_RE = re.compile(r"^\[?\s*speaker[\s_-]*([0-9]+|[a-z])\s*\]?$", re.IGNORECASE)
 # A plausible written name: letters plus the punctuation names actually contain.

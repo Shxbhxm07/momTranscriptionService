@@ -47,6 +47,7 @@ from config import (
     ENABLE_DIARIZATION,
     ENABLE_LANG_DETECT,
     ENABLE_SPEAKER_NAMING,
+    ENABLE_TRANSCRIBE_RETRY,
     ENABLE_TRANSCRIPT_CORRECTION,
     ENABLE_NOISE_REDUCTION,
     ENABLE_OCR,
@@ -58,6 +59,8 @@ from config import (
     NEMO_URL,
     OCR_LANGS,
     OCR_MAX_PAGES,
+    TRANSCRIBE_RETRY_LOST_FRACTION,
+    TRANSCRIBE_RETRY_LOST_S,
     WHISPERCPP_URL,
 )
 from core.diarize import Diarizer
@@ -73,7 +76,7 @@ from core.translate_doc import (
 )
 from utils.audio_processing import normalize_audio
 from utils.documents import SUPPORTED_EXTENSIONS, DocumentError, extract_text_blocks
-from utils.formatting import label_transcript, apply_speaker_names
+from utils.formatting import label_transcript, apply_speaker_names, speech_in_gaps
 
 logging.basicConfig(
     level=logging.INFO,
@@ -281,6 +284,33 @@ def _audio_to_english(audio: UploadFile) -> str:
         if not speaker_segments:
             logger.info("[REQ] no speaker segments — using untagged transcript")
             return transcription
+
+        # WHISPER SOMETIMES SKIPS WHOLE STRETCHES OF SPEECH, and nothing downstream can recover
+        # words that were never written. Measured 2026-09-10: the same 29-minute recording, four
+        # runs, identical bytes — three were fine, one fell into a degenerate state from ~1085 s
+        # and left a 10 s hole in every 30 s window, swallowing an attendee introducing himself.
+        # That is why the same meeting named a speaker "Amar" on one run and "Fernando" on the next.
+        # Turning off temperature fallback was measured and is WORSE (45.7% duplicate lines), so
+        # the fix is to detect the bad run and do it again. A whole second pass rather than
+        # patching the holes, because the text between the holes is degraded too.
+        if ENABLE_TRANSCRIBE_RETRY:
+            limit = max(TRANSCRIBE_RETRY_LOST_S, TRANSCRIBE_RETRY_LOST_FRACTION * float(result.get("duration") or 0.0))
+            lost = speech_in_gaps(result["segments"], speaker_segments)
+            if lost > limit:
+                logger.warning(f"[REQ] transcript skipped {lost:.0f}s of speech the diarizer heard "
+                               f"(limit {limit:.0f}s) — re-transcribing once")
+                try:
+                    retry = engine.clean(engine.transcribe_to_english(temp_file, translate=translate),
+                                         FILTER_HALLUCINATIONS)
+                    lost_retry = speech_in_gaps(retry["segments"], speaker_segments)
+                    if lost_retry < lost and retry["text"].strip():
+                        result, transcription = retry, retry["text"].strip()
+                        logger.info(f"[REQ] ✓ retry kept — {lost_retry:.0f}s skipped (was {lost:.0f}s), "
+                                    f"{len(transcription)} chars")
+                    else:
+                        logger.warning(f"[REQ] retry no better ({lost_retry:.0f}s skipped) — keeping the first")
+                except Exception as e:
+                    logger.warning(f"[REQ] re-transcription failed ({e}) — keeping the first transcript")
 
         labelled, n_speakers = label_transcript(result["segments"], speaker_segments)
         if not labelled.strip():

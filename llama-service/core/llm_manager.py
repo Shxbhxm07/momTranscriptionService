@@ -757,6 +757,8 @@ class LLMManager:
         content["action_items"] = self._drop_unsupported_names(
             content.get("action_items") or [], text, "ACTION ITEMS", get=lambda a: a.get("task", ""))
         content = self._normalise_action_items(content)
+        content = self._reconcile_attendees(content, text)
+        content = self._ground_attendee_roles(content, text)
         content = self._rewrite_summary_json(content, temperature, route)
 
         # Stage 4: translate CONTENT values, then render in the target language (labels from config).
@@ -973,6 +975,115 @@ class LLMManager:
             if tok.lower() not in transcript_lower:
                 bad.append(tok)
         return bad
+
+    # A bracket tag opening a line is a diarized speaker: "[Thomas] ..." or "[Speaker_3] ...".
+    _LINE_TAG_RE = re.compile(r"(?m)^\s*\[([^\[\]\n]{1,60})\]")
+
+    @staticmethod
+    def _attendee_key(name):
+        s = (name or "").strip().strip("[]").strip().lower()
+        m = re.match(r"speaker[\s_-]*(\d+)$", s)
+        return f"speaker_{m.group(1)}" if m else s
+
+    def _reconcile_attendees(self, content, transcript):
+        """Make ATTENDEES agree with the people who actually spoke.
+
+        The prompt already says one attendee per speaker tag; the model does not reliably obey
+        it, and attendees is the weakest-scoring field. The tags are ground truth — diarization
+        found those voices, and a name only replaces [Speaker_N] after apply_speaker_names has
+        verified it in the transcript — so this is enforced in code, the pattern that has worked
+        here where prompt rules have not:
+          • every speaker tag gets an attendee (added with an empty role if the model left it out)
+          • one attendee per speaker — a second entry for the same voice is dropped
+          • a [Speaker_N] that no line carries is an invented voice and is dropped
+          • a named person who never spoke but IS mentioned is kept: introduced or present
+            people are real attendees. Only a name found nowhere in the transcript is dropped.
+        Matching is by tokens, so "Mayor Pro Tem Jason Serbu" still claims the tag [Jason Serbu].
+        """
+        tags = list(dict.fromkeys(t.strip() for t in self._LINE_TAG_RE.findall(transcript or "") if t.strip()))
+        if not tags:
+            return content                  # no diarization → nothing to reconcile against
+        low = (transcript or "").lower()
+        tag_keys = {self._attendee_key(t): t for t in tags}
+
+        def claims(tag_key, name_key):
+            if tag_key.startswith("speaker_"):
+                return tag_key == name_key
+            toks, tt = set(name_key.split()), tag_key.split()
+            return set(tt) <= toks or tt[0] in toks
+
+        kept, dropped, matched = [], [], set()
+        for a in content.get("attendees") or []:
+            if not isinstance(a, dict):
+                continue
+            name = (a.get("name") or "").strip()
+            k = self._attendee_key(name)
+            if not k:
+                continue
+            hit = next((tk for tk in tag_keys if tk not in matched and claims(tk, k)), None)
+            if hit:
+                matched.add(hit); kept.append(a)
+            elif any(claims(tk, k) for tk in matched) or k.startswith("speaker_"):
+                dropped.append(name)        # duplicate of a matched voice, or a voice that does not exist
+            elif re.search(rf"\b{re.escape(k.split()[0])}\b", low):
+                kept.append(a)              # mentioned though not tagged — present, not speaking
+            else:
+                dropped.append(name)        # named nowhere in the transcript
+        added = []
+        for tk, t in tag_keys.items():
+            if tk not in matched:
+                disp = f"[{t}]" if tk.startswith("speaker_") else t
+                kept.append({"name": disp, "role": "Unknown"}); added.append(disp)
+        if added or dropped:
+            logger.info(f"[MOM] ATTENDEES reconciled with {len(tags)} speaker tag(s): "
+                        f"added {added or 'none'}, dropped {dropped or 'none'}")
+        content["attendees"] = kept
+        return content
+
+    # Words that make up a job title without saying anything specific about the person.
+    _ROLE_GENERIC = frozenset("""team teams member members lead leads leader leaders manager managers management
+        engineer engineers engineering staff employee employees participant participants attendee attendees host
+        contributor contributors colleague colleagues stakeholder stakeholders representative person individual
+        senior junior principal associate specialist unknown none role organization organisation""".split())
+    _ROLE_STOP = frozenset("the a an of and for in on at to with from by as".split())
+
+    def _ground_attendee_roles(self, content, transcript):
+        """Replace invented job titles with "Unknown".
+
+        The prompt says a role must be stated in the transcript and "Unknown" is otherwise the right
+        answer. Llama ignores that: measured 2026-09-10, three runs of one staff meeting all gave
+        "Team Lead", "Manager" and "Team Member" to people whose titles are never mentioned, and the
+        Package Team run gave "Team Member" to five people. The fabrications are always built only
+        from generic title words, so a role part is kept only if it contains a SPECIFIC word
+        ("Council", "Marketing", "Security Policies", "Front-end") that occurs in the transcript.
+        Checked per comma-separated part: "Engineering Manager, SEC" keeps the real "SEC" and loses
+        the invented title. This can only turn a role into "Unknown" — it never adds a claim.
+        Known gap: a fabricated title with a specific word that happens to be spoken
+        ("Security Engineer" in a security meeting) still passes.
+        """
+        low = (transcript or "").lower()
+        changed = []
+        for a in content.get("attendees") or []:
+            if not isinstance(a, dict):
+                continue
+            role = (a.get("role") or "").strip()
+            if not role or role.lower() == "unknown":
+                continue
+            kept = []
+            for part in (p.strip() for p in role.split(",")):
+                words = [w for w in re.findall(r"[a-z0-9]+", part.lower()) if w not in self._ROLE_STOP]
+                specific = [w for w in words if w not in self._ROLE_GENERIC]
+                if specific and any(re.search(rf"\b{re.escape(w)}\b", low) for w in specific):
+                    kept.append(part)
+            new = ", ".join(kept) or "Unknown"
+            if new != role:
+                changed.append(f"{a.get('name', '')}: {role!r} → {new!r}")
+                a["role"] = new
+        if changed:
+            logger.info(f"[MOM] ATTENDEES: {len(changed)} role(s) not supported by the transcript")
+            for c in changed[:8]:
+                logger.info(f"[MOM]   {c}")
+        return content
 
     def _drop_unsupported_names(self, items, transcript, field, get=lambda x: x):
         """Remove items naming a person/place/thing the transcript never mentions."""
@@ -1213,62 +1324,6 @@ class LLMManager:
             content["key_points"] = merged
         logger.info(f"[MOM] KEY POINTS: {len(existing)} main + {added} recovered = {len(merged)}")
         return content
-
-    _ITEM_SCHEMA = {
-        "type": "object",
-        "properties": {"items": {"type": "array", "items": {
-            "type": "object",
-            "properties": {"text": {"type": "string"}, "quote": {"type": "string"},
-                           "owner": {"type": "string"}, "due": {"type": "string"}},
-            "required": ["text", "quote", "owner", "due"], "additionalProperties": False}}},
-        "required": ["items"], "additionalProperties": False,
-    }
-
-    @classmethod
-    def _dedupe(cls, items, get=lambda x: x):
-        """Drop near-duplicates WITHIN one list.
-
-        The fills only ever compared NEW items against the existing ones, never the existing ones
-        against each other — and `existing` is a concatenation of the main JSON pass and the window
-        pass, which routinely find the same task and word it differently. Measured 2026-09-09:
-        "Close the issue and link to meeting notes" and "The issue will be closed and linked to
-        these notes" both survived, because neither was ever compared with the other.
-        """
-        kept, seen, seen_terms = [], set(), []
-        for it in items:
-            text = get(it) or ""
-            key, terms = cls._task_key(text), cls._task_terms(text)
-            if not key or key in seen or cls._is_near_duplicate(terms, seen_terms):
-                continue
-            seen.add(key); seen_terms.append(terms); kept.append(it)
-        return kept
-
-    def _grounded_items(self, system_prompt, transcript, ask, temperature, route, label):
-        """Run a whole-transcript extraction that must QUOTE its evidence, and drop what cannot.
-
-        key_points has been quote-grounded since the window rewrite; decisions and action items
-        were not, and they are the two least reliable fields in every scored run. Measured
-        2026-09-09 they carried the model's own commentary — "Council Member Foster was not
-        explicitly assigned a task, but ..." — as though it were a decision. Nothing like that can
-        produce a verbatim quote, so the same filter that cleaned key_points cleans these.
-
-        Returns [] on any failure, which leaves the caller's existing items untouched.
-        """
-        try:
-            raw = self.generate(
-                system_prompt, f"TRANSCRIPT:\n{transcript}\n\n{ask}",
-                MAX_NEW_TOKENS_EXTRACTION, temperature,
-                model=(route or {}).get("model"), api_base=(route or {}).get("api_base"),
-                extra={"response_format": {"type": "json_schema", "json_schema": {
-                    "name": "items", "strict": True, "schema": self._ITEM_SCHEMA}}},
-            )
-            items = (json.loads(raw) or {}).get("items") or []
-        except Exception as e:
-            logger.warning(f"[MOM] {label} grounded extraction failed ({e!r}) — keeping existing items")
-            return []
-        grounded = self._ground_points(items, transcript)
-        logger.info(f"[MOM] {label}: {len(items)} proposed → {len(grounded)} survived grounding")
-        return grounded
 
     def _fill_decisions_json(self, content, transcript, temperature, route=None):
         """Run the focused decisions extraction and MERGE it with the main pass's decisions.
