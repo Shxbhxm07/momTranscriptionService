@@ -202,3 +202,15 @@ ELASTIC_PASSWORD = os.getenv("ELASTIC_PASSWORD", "").strip()
 ELASTIC_INDEX_ATTACHED = os.getenv("ELASTIC_INDEX_ATTACHED", "mom-attached")
 ELASTIC_INDEX_INGESTED = os.getenv("ELASTIC_INDEX_INGESTED", "mom-ingested")
 ELASTIC_CREATE_INDICES = os.getenv("ELASTIC_CREATE_INDICES", "true").lower() == "true"
+
+
+# ── Kafka ingestion ──────────────────────────────────────────────────────────
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+KAFKA_JOB_TOPIC = os.getenv("KAFKA_JOB_TOPIC", "mom.jobs")
+KAFKA_ACK_TOPIC = os.getenv("KAFKA_ACK_TOPIC", "mom.acks")
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "mom-consumer")
+# 20 minutes. A meeting takes 6-10 to process and the Kafka default is 5, at which point the broker
+# assumes the consumer died and redelivers the message to someone else — every meeting processed
+# twice, visible only on the bill.
+KAFKA_MAX_POLL_INTERVAL_MS = int(os.getenv("KAFKA_MAX_POLL_INTERVAL_MS", str(20 * 60 * 1000)))
+MOM_API_URL = os.getenv("MOM_API_URL", "http://transcribe-api:8000/transcribe-and-generate-mom")

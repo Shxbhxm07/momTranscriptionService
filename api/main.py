@@ -36,6 +36,7 @@ minutes. There is no cloud client and no API key anywhere in this service.
 import logging
 import os
 import tempfile
+import time
 from typing import Dict, Optional
 
 import uvicorn
@@ -124,8 +125,24 @@ async def startup_event():
     )
 
 
+# /health fans out to every dependency, so it is far too expensive to run on every call. A short
+# cache makes a burst of probes cost one round trip instead of N — the pile-up that wedged this
+# service came from exactly such a burst.
+_HEALTH_CACHE: dict = {"at": 0.0, "body": None}
+_HEALTH_TTL = 10.0
+
+
+@app.get("/")
+def root():
+    """Static liveness route. No dependencies, no I/O — safe to probe every few seconds."""
+    return {"service": "offline-mom-api", "status": "up"}
+
+
 @app.get("/health")
 def health():
+    now = time.monotonic()
+    if _HEALTH_CACHE["body"] is not None and now - _HEALTH_CACHE["at"] < _HEALTH_TTL:
+        return _HEALTH_CACHE["body"]
     asr_ok = engine.is_ready()
     llm = mom_generator.health_detail()
     # llama-service reports which backend it RESOLVED to. Surfacing it here is what makes
@@ -134,7 +151,7 @@ def health():
     # being invisible until someone read the container's environment.
     llm_ok = llm.get("status") == "healthy"
     llm_offline = llm.get("mode") == "offline"
-    return {
+    body = {
         "status": "healthy" if (asr_ok and llm_ok) else "degraded",
         "offline": bool(llm_offline),
         "pipeline": {
@@ -174,6 +191,8 @@ def health():
             },
         },
     }
+    _HEALTH_CACHE.update(at=now, body=body)
+    return body
 
 
 def _refine(transcript: str, known_names: Dict[str, str]) -> str:

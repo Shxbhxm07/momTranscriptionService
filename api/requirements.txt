@@ -39,3 +39,8 @@ minio==7.2.7
 # Elasticsearch client for the Kafka ingestion path. Pinned to the 8.x line to match the server;
 # the 8 and 9 clients reject each other's servers on the version-compatibility handshake.
 elasticsearch==8.14.0
+
+# Kafka consumer/producer for the ingestion path. kafka-python is pure Python — no librdkafka
+# build step, which keeps the image simple; throughput is irrelevant here because one message
+# occupies the GPU for minutes.
+kafka-python==2.0.2

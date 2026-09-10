@@ -102,5 +102,29 @@ services:
       elasticsearch:
         condition: service_healthy
 
+  # The consumer runs as its OWN SERVICE, sharing the API's image. Every orphaning problem during
+  # development came from running it as `docker exec`: the client went away, the server kept
+  # transcribing for nobody, and the API eventually wedged. A compose service is supervised,
+  # restarted on failure, and survives whatever happens to the terminal that started it.
+  mom-consumer:
+    image: offline-mom-api:latest
+    container_name: offline-mom-consumer
+    command: ["python", "/app/consumer.py"]
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - KAFKA_JOB_TOPIC=mom.jobs
+      - KAFKA_ACK_TOPIC=mom.acks
+      - MOM_API_URL=http://transcribe-api:8000/transcribe-and-generate-mom
+      - MINIO_ENDPOINT=minio:9000
+      - ELASTIC_URL=http://elasticsearch:9200
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
 volumes:
   minio-data:

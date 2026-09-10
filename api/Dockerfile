@@ -46,13 +46,21 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py config.py constants.py ./
+# consumer.py is the Kafka ingestion entrypoint; it shares this image and runs as its own
+# compose service rather than inside the API process.
+COPY main.py config.py constants.py consumer.py ./
 COPY core/ ./core/
 COPY utils/ ./utils/
 
 EXPOSE 8000
 
+# Probe "/" (a static route), NOT "/health" — the same lesson llama-service already learned.
+# /health is a SYNC handler that round-trips to whisper AND to llama-service, whose own /health
+# round-trips to the LLM. Each probe therefore parks a threadpool thread for up to 30s. Docker
+# probes every 30s, so during a long job the probes pile up faster than they drain, exhaust the
+# pool, and the API stops answering ANYTHING — measured 2026-09-10, unreachable for 54 minutes
+# after a single 29-minute meeting. Container liveness means "is uvicorn serving", nothing more.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/ || exit 1
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

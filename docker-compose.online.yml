@@ -22,13 +22,13 @@ services:
   # there is no race, so the dependency is dropped — otherwise compose blocks forever waiting
   # on a container that is never coming up.
   whisper-server:
-    depends_on: []
+    depends_on: !reset null
 
   nemo-service:
-    depends_on: []
+    depends_on: !reset null
 
   llama-service:
-    depends_on: []
+    depends_on: !reset null
     environment:
       - VLLM_API_BASE=https://openrouter.ai/api/v1
       - LLM_MODEL_PATH=meta-llama/llama-3.3-70b-instruct

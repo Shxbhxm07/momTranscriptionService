@@ -56,7 +56,10 @@ class MomGenerator:
         """Full /health — including which LLM backend llama-service actually resolved to.
         Used by this API's /health so 'am I really offline?' is one HTTP call."""
         try:
-            r = self.session.get(f"{self.base_url}/health", timeout=30)
+            # 5s, not 30. This call round-trips to the LLM, so under load it sat for the full
+            # 30 while holding a threadpool thread. A health probe that takes 30s has already
+            # answered the question — the service is not healthy.
+            r = self.session.get(f"{self.base_url}/health", timeout=5)
             return r.json() if r.status_code == 200 else {"status": "unreachable"}
         except requests.RequestException as e:
             return {"status": "unreachable", "error": str(e)}
