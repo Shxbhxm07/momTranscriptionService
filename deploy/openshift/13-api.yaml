@@ -1,0 +1,46 @@
+# HTTP API: /transcribe-and-generate-mom (MoM) and /translate-document (document translation).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transcribe-api
+  labels: {app: transcribe-api}
+spec:
+  replicas: 1                      # one meeting at a time: whisper answers a second concurrent job with 503
+  selector: {matchLabels: {app: transcribe-api}}
+  template:
+    metadata: {labels: {app: transcribe-api}}
+    spec:
+      containers:
+      - name: api
+        image: REGISTRY/offline-mom-api:1.0.0
+        ports: [{containerPort: 8000}]
+        envFrom:
+        - {configMapRef: {name: mom-config}}
+        - {secretRef: {name: mom-secrets}}
+        resources:
+          requests: {cpu: "1", memory: 1Gi}
+          limits: {memory: 4Gi}    # headroom for audio decoding and OCR of large PDFs
+        volumeMounts: [{name: scratch, mountPath: /tmp}]
+        # "/" is static. /health round-trips to the LLM and must NOT be used as a probe.
+        readinessProbe: {httpGet: {path: /, port: 8000}, initialDelaySeconds: 5, periodSeconds: 10}
+        livenessProbe: {httpGet: {path: /, port: 8000}, initialDelaySeconds: 20, periodSeconds: 30, failureThreshold: 5}
+      volumes: [{name: scratch, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: transcribe-api}
+spec: {selector: {app: transcribe-api}, ports: [{port: 8000, targetPort: 8000}]}
+---
+# Only needed if something outside the cluster calls the API directly (e.g. /translate-document).
+# The timeout annotation is REQUIRED: the router's default is 30 s, and a MoM or a long document
+# takes minutes, so without it every real request is cut off with a 504.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: transcribe-api
+  annotations:
+    haproxy.router.openshift.io/timeout: 3600s
+spec:
+  to: {kind: Service, name: transcribe-api}
+  port: {targetPort: 8000}
+  tls: {termination: edge}

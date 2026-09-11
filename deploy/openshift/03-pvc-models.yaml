@@ -1,0 +1,12 @@
+# Model weights, ~3.2 GB, read-only after the one-time copy (see DEPLOY.md step 3).
+# ReadOnlyMany lets whisper and nemo mount it on different nodes; use ReadWriteOnce if your
+# storage class cannot, and schedule both pods to one node.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mom-models
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 5Gi

@@ -25,10 +25,12 @@ stays idempotent on a stable document id, so a genuine redelivery overwrites ins
 import hashlib
 import json
 import logging
+import os
 import signal
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import requests
 from kafka import KafkaConsumer, KafkaProducer
@@ -47,6 +49,21 @@ logger = logging.getLogger("consumer")
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _running = True
+
+# LIVENESS. This service runs no web server, so the API image's HTTP healthcheck can never pass here
+# and was switched off — which left an orchestrator nothing to watch, and a hung consumer would sit
+# forever holding the partition. The poll loop touches this file on every pass: at most every 5 s
+# when idle, every 1 s while a job runs (the loop keeps polling a paused partition, see main()). So a
+# file older than a couple of minutes means the loop itself is stuck, not that a meeting is long:
+#   livenessProbe: exec: ["sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/consumer-alive) )) -lt 120"]
+HEARTBEAT_FILE = os.getenv("CONSUMER_HEARTBEAT_FILE", "/tmp/consumer-alive")
+
+
+def _beat():
+    try:
+        Path(HEARTBEAT_FILE).touch()
+    except OSError as e:       # a read-only filesystem must not take the consumer down with it
+        logger.warning(f"heartbeat not written ({e}) — the liveness probe will fail")
 
 
 def _stop(signum, _frame):
@@ -113,6 +130,7 @@ def main():
 
     worker = ThreadPoolExecutor(max_workers=1)
     while _running:
+        _beat()
         for tp, records in (consumer.poll(timeout_ms=5000) or {}).items():
             for rec in records:
                 try:
@@ -127,6 +145,7 @@ def main():
                 consumer.pause(tp)
                 pending = worker.submit(process, job, store, index)
                 while not pending.done():
+                    _beat()
                     consumer.poll(timeout_ms=1000)   # paused → no records, but keeps the membership alive
                 consumer.resume(tp)
                 ack = pending.result()               # process() never raises

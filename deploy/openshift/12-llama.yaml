@@ -1,0 +1,32 @@
+# Holds the prompts and calls the LLM (IBM watsonx). No GPU — the model runs on watsonx.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-service
+  labels: {app: llama-service}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: llama-service}}
+  template:
+    metadata: {labels: {app: llama-service}}
+    spec:
+      containers:
+      - name: llama
+        image: REGISTRY/offline-mom-llama:1.0.0
+        ports: [{containerPort: 8001}]
+        envFrom:
+        - {configMapRef: {name: mom-config}}
+        - {secretRef: {name: mom-secrets}}
+        resources:
+          requests: {cpu: 500m, memory: 512Mi}
+          limits: {memory: 2Gi}
+        # "/" is a static route. It stays answerable while a meeting is being processed because the
+        # blocking handlers run off the event loop — earlier they froze it and the probe failed
+        # 16 times in a row on a perfectly healthy job.
+        readinessProbe: {httpGet: {path: /, port: 8001}, initialDelaySeconds: 5, periodSeconds: 10}
+        livenessProbe: {httpGet: {path: /, port: 8001}, initialDelaySeconds: 20, periodSeconds: 30, failureThreshold: 5}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: llama-service}
+spec: {selector: {app: llama-service}, ports: [{port: 8001, targetPort: 8001}]}

@@ -1,0 +1,67 @@
+# Non-secret configuration shared by every MoM pod. Secrets live in 02-secret.yaml.
+# Values marked CHANGE come from your environment; everything else is a tested default.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mom-config
+data:
+  # ── service wiring (in-cluster DNS names; keep unless you rename the Services) ──
+  WHISPERCPP_URL: "http://whisper-server:8080"
+  NEMO_URL: "http://nemo-service:8003"
+  LLAMA_URL: "http://llama-service:8001"
+  MOM_API_URL: "http://transcribe-api:8000/transcribe-and-generate-mom"
+
+  # ── LLM on IBM watsonx (CP4D) — CHANGE after running scripts/ibm_check.py ──
+  # Use .../ml/v1/text/chat?... if the checker says the chat endpoint exists (keeps JSON-schema
+  # extraction); otherwise .../ml/v1/text/generation?...
+  VLLM_API_BASE: "https://cpd-watsonx-imir.apps.ocp4.iaf.in/ml/v1/text/chat?version=2023-05-29"   # CHANGE
+  LLM_MODEL_PATH: "meta-llama/llama-3-3-70b-instruct"                                            # CHANGE
+  WATSONX_PROJECT_ID: "<project-id>"                                                              # CHANGE
+  CP4D_AUTH_URL: "https://cpd-watsonx-imir.apps.ocp4.iaf.in/icp4d-api/v1/authorize"              # CHANGE
+  LLM_AUTH_MODE: "cp4d"
+  CP4D_TOKEN_TTL: "3600"
+  LLM_VERIFY_SSL: "false"          # self-signed cluster certificate
+  LLM_PROVIDER_ORDER: ""           # OpenRouter-only; must stay empty
+  LLM_CONCURRENCY: "2"             # raise only if your watsonx quota allows more parallel calls
+  MODEL_CONTEXT_LIMIT: "32768"
+  APP_MODE: "offline"
+
+  # ── MoM accuracy features (all measured; leave as shipped) ──
+  MOM_WINDOW_KEY_POINTS: "true"
+  MOM_MERGE_ITEMS: "true"
+  MOM_VERIFY_DECISIONS: "false"    # built, not yet measured on its own — keep off
+  ENABLE_DIARIZATION: "true"
+  ENABLE_SPEAKER_NAMING: "true"
+  ENABLE_TRANSCRIPT_CORRECTION: "true"
+  ENABLE_TRANSCRIBE_RETRY: "true"
+  ENABLE_LANG_DETECT: "true"
+  FILTER_HALLUCINATIONS: "true"
+
+  # ── Kafka — CHANGE ──
+  KAFKA_BOOTSTRAP: "<broker-1:9092,broker-2:9092>"   # CHANGE
+  KAFKA_JOB_TOPIC: "mom.jobs"                        # CHANGE to your topic
+  KAFKA_ACK_TOPIC: "mom.acks"                        # CHANGE to your topic
+  KAFKA_GROUP_ID: "mom-consumer"
+  KAFKA_MAX_POLL_INTERVAL_MS: "1200000"              # a safety net only; long jobs are handled in code
+
+  # ── MinIO — CHANGE ──
+  MINIO_ENDPOINT: "<minio-host:9000>"                # CHANGE (host:port, no scheme)
+  MINIO_SECURE: "false"                              # CHANGE to "true" if MinIO is on TLS
+  MINIO_INPUT_BUCKET: ""                             # empty = first path segment of file_urls is the bucket
+  MINIO_SUMMARY_BUCKET: "summaries"                  # CHANGE
+
+  # ── Elasticsearch — CHANGE ──
+  ELASTIC_URL: "http://<elastic-host>:9200"          # CHANGE
+  ELASTIC_INDEX_ATTACHED: "mom-attached"             # CHANGE to the agreed index name
+  ELASTIC_INDEX_INGESTED: "mom-ingested"             # CHANGE to the agreed index name
+  ELASTIC_CREATE_INDICES: "true"                     # "false" if your team manages mappings
+
+  # ── document translation ──
+  ENABLE_OCR: "true"
+  OCR_LANGS: "hin+eng"
+  MAX_DOC_MB: "50"
+  MAX_UPLOAD_MB: "500"
+
+  # ── offline ──
+  HF_HUB_OFFLINE: "1"
+  TRANSFORMERS_OFFLINE: "1"

@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nemo-service
+  labels: {app: nemo-service}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: nemo-service}}
+  template:
+    metadata: {labels: {app: nemo-service}}
+    spec:
+      containers:
+      - name: nemo
+        image: REGISTRY/offline-mom-nemo:1.0.0
+        ports: [{containerPort: 8003}]
+        envFrom: [{configMapRef: {name: mom-config}}]
+        env:
+        # Local model FILES. By name, NeMo downloads these from NVIDIA on first start, which fails
+        # on an offline cluster. Verified to load and diarize with networking disabled.
+        - {name: DIARIZATION_MODEL_PATH, value: /models/nemo/titanet-l.nemo}
+        - {name: VAD_MODEL_PATH, value: /models/nemo/vad_multilingual_marblenet.nemo}
+        - {name: NEMO_CACHE_DIR, value: /tmp/nemo-cache}
+        - {name: NVIDIA_VISIBLE_DEVICES, value: all}
+        - {name: NVIDIA_DRIVER_CAPABILITIES, value: "compute,utility"}
+        resources:
+          requests: {cpu: "2", memory: 6Gi}
+          limits: {memory: 10Gi, nvidia.com/gpu: 1}     # ~0.6 GB of GPU memory in use
+        volumeMounts:
+        - {name: models, mountPath: /models, readOnly: true}
+        - {name: scratch, mountPath: /tmp}
+        # nemo_loaded flips true only once TitaNet is resident — a real "ready" signal.
+        readinessProbe:
+          exec: {command: ["python", "-c", "import urllib.request,sys; sys.exit(0 if b'\"nemo_loaded\":true' in urllib.request.urlopen('http://localhost:8003/health',timeout=5).read() else 1)"]}
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        livenessProbe:
+          httpGet: {path: /health, port: 8003}
+          initialDelaySeconds: 180
+          periodSeconds: 30
+          failureThreshold: 5
+      volumes:
+      - {name: models, persistentVolumeClaim: {claimName: mom-models, readOnly: true}}
+      - {name: scratch, emptyDir: {}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: nemo-service}
+spec: {selector: {app: nemo-service}, ports: [{port: 8003, targetPort: 8003}]}

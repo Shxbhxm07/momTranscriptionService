@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whisper-server
+  labels: {app: whisper-server}
+spec:
+  replicas: 1                      # serialises on its GPU; scale by adding GPUs, not replicas on one
+  selector: {matchLabels: {app: whisper-server}}
+  template:
+    metadata: {labels: {app: whisper-server}}
+    spec:
+      containers:
+      - name: whisper
+        image: REGISTRY/offline-mom-whisper:1.0.0
+        ports: [{containerPort: 8080}]
+        env:
+        - {name: WHISPER_MODEL, value: /models/whisper/ggml-large-v3.bin}
+        - {name: WHISPER_VAD_MODEL, value: /models/whisper/ggml-silero-v6.2.0.bin}
+        - {name: WHISPER_THREADS, value: "8"}
+        - {name: NVIDIA_VISIBLE_DEVICES, value: all}
+        resources:
+          requests: {cpu: "2", memory: 4Gi}
+          limits: {memory: 8Gi, nvidia.com/gpu: 1}      # ~4.2 GB of GPU memory in use
+        volumeMounts: [{name: models, mountPath: /models, readOnly: true}]
+        # whisper.cpp binds its port only after the model is on the GPU, so port-open = ready.
+        readinessProbe: {tcpSocket: {port: 8080}, initialDelaySeconds: 20, periodSeconds: 10}
+        livenessProbe: {tcpSocket: {port: 8080}, initialDelaySeconds: 120, periodSeconds: 30, failureThreshold: 5}
+      volumes: [{name: models, persistentVolumeClaim: {claimName: mom-models, readOnly: true}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: whisper-server}
+spec: {selector: {app: whisper-server}, ports: [{port: 8080, targetPort: 8080}]}
