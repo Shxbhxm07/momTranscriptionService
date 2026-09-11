@@ -119,6 +119,14 @@ MOM_WINDOW_KEY_POINTS = os.getenv("MOM_WINDOW_KEY_POINTS", "true").lower() == "t
 # cannot see that "revise and re-record the LEP course" and "the revised script will be recorded
 # tomorrow" are one task — measured 2026-09-11, LEP carried 19 action items for 12 real ones.
 MOM_MERGE_ITEMS = os.getenv("MOM_MERGE_ITEMS", "true").lower() == "true"
+
+# Require each decision to carry verbatim evidence that the group settled it, and drop the ones that cannot.
+# OFF until measured: quote-grounding these fields shipped once inside a four-change bundle that scored 78
+# against 84, and nobody could tell which change did the damage. Measured on its own, it is the only lever
+# left for decisions — measured 2026-09-11 the model still records plain tasks ("The team will review the
+# Issue Herder tool") and non-events ("The community contribution will continue") as decisions, and no
+# wording rule separates those from a real group agreement.
+MOM_VERIFY_DECISIONS = os.getenv("MOM_VERIFY_DECISIONS", "false").lower() == "true"
 # Windows are independent HTTP calls; the limit is provider rate limiting, not this box.
 # 2, not 4: four concurrent window calls tripped OpenRouter's rate limit, the 429 exhausted its
 # retries, and the whole request fell through to the legacy pipeline — which returns no

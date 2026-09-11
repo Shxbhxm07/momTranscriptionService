@@ -8,13 +8,13 @@ import time
 
 from config import (APP_MODE, LLM_MODEL_PATH, VLLM_API_BASE, MAX_INPUT_TOKENS,
                     MAX_NEW_TOKENS_PER_CHUNK, MAX_NEW_TOKENS_SYNTHESIS, MODEL_CONTEXT_LIMIT,
-                    MAX_NEW_TOKENS_EXTRACTION, MAX_NEW_TOKENS_CLASSIFY, MOM_MERGE_ITEMS,
+                    MAX_NEW_TOKENS_EXTRACTION, MAX_NEW_TOKENS_CLASSIFY, MOM_MERGE_ITEMS, MOM_VERIFY_DECISIONS,
                     LLM_MODEL_LONG, VLLM_API_BASE_LONG, LLM_LONG_THRESHOLD_TOKENS,
                     MODEL_CONTEXT_LIMIT_LONG, LLM_PROVIDER_ORDER, MOM_WINDOW_KEY_POINTS, WINDOW_CONCURRENCY,
                     LLM_CONCURRENCY)
 from core.groq_key_pool import load_pool_from_env
 from core.translation_validator import validate_translation
-from prompts import MEETING_ANALYSIS_PROMPT, SYNTHESIS_PROMPT, MEETING_ANALYSIS_PROMPT_JSON, SYNTHESIS_PROMPT_JSON, SPEAKER_MAPPING_PROMPT, DECISIONS_EXTRACTION_PROMPT, KEY_POINTS_EXTRACTION_PROMPT, WINDOW_EXTRACTION_PROMPT, SUMMARY_FROM_POINTS_PROMPT, FIGURES_EXTRACTION_PROMPT, TRANSCRIPT_CORRECTION_PROMPT, ITEMS_MERGE_PROMPT, TRANSLATED_TRANSCRIPT_CORRECTION_PROMPT, ACTION_ITEMS_EXTRACTION_PROMPT, MEETING_TYPE_CLASSIFY_PROMPT, TEMPLATE_FOCUS
+from prompts import MEETING_ANALYSIS_PROMPT, SYNTHESIS_PROMPT, MEETING_ANALYSIS_PROMPT_JSON, SYNTHESIS_PROMPT_JSON, SPEAKER_MAPPING_PROMPT, DECISIONS_EXTRACTION_PROMPT, KEY_POINTS_EXTRACTION_PROMPT, WINDOW_EXTRACTION_PROMPT, SUMMARY_FROM_POINTS_PROMPT, FIGURES_EXTRACTION_PROMPT, TRANSCRIPT_CORRECTION_PROMPT, ITEMS_MERGE_PROMPT, DECISIONS_VERIFY_PROMPT, TRANSLATED_TRANSCRIPT_CORRECTION_PROMPT, ACTION_ITEMS_EXTRACTION_PROMPT, MEETING_TYPE_CLASSIFY_PROMPT, TEMPLATE_FOCUS
 from utils.text_utils import chunk_transcript, clean_mom_output, preprocess_transcript
 from localization.mom_i18n import parse_and_validate, parse_content, render_mom, GLOSSARY_DNT, GLOSSARY_TERMS
 
@@ -781,6 +781,8 @@ class LLMManager:
         if MOM_MERGE_ITEMS:
             content = self._merge_duplicate_items(content, "action_items", temperature, route)
             content = self._merge_duplicate_items(content, "decisions", temperature, route)
+        if MOM_VERIFY_DECISIONS:
+            content = self._verify_decisions(content, text, temperature, route)
         content = self._reconcile_attendees(content, text)
         content = self._ground_attendee_roles(content, text)
         content = self._rewrite_summary_json(content, temperature, route)
@@ -1008,6 +1010,63 @@ class LLMManager:
         s = (name or "").strip().strip("[]").strip().lower()
         m = re.match(r"speaker[\s_-]*(\d+)$", s)
         return f"speaker_{m.group(1)}" if m else s
+
+    _EVIDENCE_SCHEMA = {
+        "type": "object",
+        "properties": {"evidence": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"n": {"type": "integer"}, "quote": {"type": "string"}},
+            "required": ["n", "quote"], "additionalProperties": False}}},
+        "required": ["evidence"], "additionalProperties": False,
+    }
+
+    def _verify_decisions(self, content, transcript, temperature, route=None):
+        """Keep only decisions the transcript can show the group settled.
+
+        Key points are quote-checked and score 92-95; decisions are not and sit at 45-76. Measured
+        2026-09-11, what survives in decisions is plain tasks ("The team will review the Issue Herder
+        tool") and non-events ("The community contribution for Composer will continue"). Both are phrased
+        as group plans, so no wording rule separates them from a real agreement — but neither has a moment
+        in the transcript where anyone agreed. The model supplies the evidence; the code checks it appears
+        verbatim, exactly as _ground_points does for key points, so the evidence cannot be invented.
+        """
+        decisions = [d for d in (content.get("decisions") or []) if isinstance(d, str) and d.strip()]
+        if not decisions:
+            return content
+        listing = "\n".join(f"{i + 1}. {d}" for i, d in enumerate(decisions))
+        try:
+            raw = self.generate(
+                DECISIONS_VERIFY_PROMPT, f"TRANSCRIPT:\n{transcript}\n\nSTATEMENTS:\n{listing}",
+                MAX_NEW_TOKENS_EXTRACTION, temperature,
+                model=(route or {}).get("model"), api_base=(route or {}).get("api_base"),
+                extra={"response_format": {"type": "json_schema", "json_schema": {
+                    "name": "evidence", "strict": True, "schema": self._EVIDENCE_SCHEMA}}},
+            )
+            evidence = (json.loads(raw) or {}).get("evidence") or []
+        except Exception as e:
+            logger.warning(f"[MOM] DECISIONS: verification failed ({e!r}) — keeping every decision")
+            return content
+
+        hay = self._norm_quote(transcript)
+        supported = set()
+        for e in evidence:
+            if not isinstance(e, dict):
+                continue
+            n, quote = e.get("n"), self._norm_quote(e.get("quote") or "")
+            if isinstance(n, int) and 1 <= n <= len(decisions) and len(quote) >= self._MIN_QUOTE_CHARS and quote in hay:
+                supported.add(n - 1)
+        dropped = [d for i, d in enumerate(decisions) if i not in supported]
+        if not supported:
+            # Every decision unsupported means the verification itself misfired, not that the meeting
+            # settled nothing. Emptying the section on that basis would be worse than leaving it alone.
+            logger.warning(f"[MOM] DECISIONS: no decision could be evidenced — keeping all {len(decisions)}")
+            return content
+        if dropped:
+            logger.info(f"[MOM] DECISIONS: dropped {len(dropped)} without evidence of agreement")
+            for d in dropped[:6]:
+                logger.info(f"[MOM]   ✗ {d[:80]!r}")
+        content["decisions"] = [d for i, d in enumerate(decisions) if i in supported]
+        return content
 
     _MERGE_SCHEMA = {
         "type": "object",

@@ -1102,3 +1102,20 @@ Return ONLY the numbers, as JSON: {"groups": [[1, 5, 9], [2, 6]]}
 List a group only when it has two or more entries. An entry with no duplicate appears in no group.
 If nothing is duplicated, return {"groups": []}.\
 """.strip()
+
+
+DECISIONS_VERIFY_PROMPT = """\
+Below is a numbered list of statements recorded as DECISIONS from one meeting, and the transcript they came from.
+
+For each statement, find the words in the transcript that show the group actually SETTLED it — a vote carried,
+an agreement given, a proposal accepted, a conclusion reached. Copy 6-25 words CHARACTER-FOR-CHARACTER from the
+transcript. Never tidy, translate or paraphrase; the quote is checked automatically and a quote that is not
+found verbatim is treated as no evidence at all.
+
+If the transcript shows no such moment — the statement is only a task someone will do, a status update, or
+something nobody actually agreed to — return NO quote for that number. That is the right answer and is far
+better than an invented or loosely related quote.
+
+Return JSON: {"evidence": [{"n": 1, "quote": "exact words from the transcript"}, {"n": 3, "quote": "..."}]}
+Include a number only when you have a genuine verbatim quote for it.\
+""".strip()
