@@ -42,6 +42,19 @@ LLM_LONG_THRESHOLD_TOKENS = int(os.getenv("LLM_LONG_THRESHOLD_TOKENS", "5000"))
 # hosts running different quantisations. Ignored for a local vLLM.
 LLM_PROVIDER_ORDER = [p.strip() for p in os.getenv("LLM_PROVIDER_ORDER", "").split(",") if p.strip()]
 
+# ── IBM watsonx.ai ────────────────────────────────────────────────────────────────────────────────
+# Two ways in, and WATSONX_PROJECT_ID is the switch. watsonx exposes an OpenAI-compatible
+# /chat/completions through its model gateway, which needs nothing here beyond VLLM_API_BASE and a
+# key. The NATIVE API is a different shape — model_id/project_id, and the token budget carried as
+# max_tokens on a /ml/v1/text/chat URL — so setting a project id selects that shape.
+# Auth: a SaaS IBM Cloud API key must be exchanged for an IAM token that expires (LLM_AUTH_MODE=iam,
+# see core/ibm_auth.py); an on-prem Zen key is long-lived and uses the ordinary key path (bearer).
+WATSONX_PROJECT_ID = os.getenv("WATSONX_PROJECT_ID", "").strip()
+WATSONX_VERSION    = os.getenv("WATSONX_VERSION", "2024-10-08").strip()
+IBM_IAM_URL        = os.getenv("IBM_IAM_URL", "https://iam.cloud.ibm.com/identity/token").strip()
+LLM_AUTH_MODE      = (os.getenv("LLM_AUTH_MODE", "").strip().lower()
+                      or ("iam" if "ml.cloud.ibm.com" in (VLLM_API_BASE or "") else "bearer"))
+
 # REASONING MODELS spend part of the output allowance "thinking" before they write, so every
 # budget below has to cover the thinking AND the answer. This was inferred from the model NAME,
 # which is a trap the moment the model changes: swapping to Llama silently flips it to False and

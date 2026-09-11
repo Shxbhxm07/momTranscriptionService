@@ -10,7 +10,8 @@ from config import (APP_MODE, LLM_MODEL_PATH, VLLM_API_BASE, MAX_INPUT_TOKENS,
                     MAX_NEW_TOKENS_PER_CHUNK, MAX_NEW_TOKENS_SYNTHESIS, MODEL_CONTEXT_LIMIT,
                     MAX_NEW_TOKENS_EXTRACTION, MAX_NEW_TOKENS_CLASSIFY, MOM_MERGE_ITEMS, MOM_VERIFY_DECISIONS,
                     LLM_MODEL_LONG, VLLM_API_BASE_LONG, LLM_LONG_THRESHOLD_TOKENS,
-                    MODEL_CONTEXT_LIMIT_LONG, LLM_PROVIDER_ORDER, MOM_WINDOW_KEY_POINTS, WINDOW_CONCURRENCY,
+                    MODEL_CONTEXT_LIMIT_LONG, LLM_PROVIDER_ORDER, WATSONX_PROJECT_ID,
+                    WATSONX_VERSION, IBM_IAM_URL, LLM_AUTH_MODE, MOM_WINDOW_KEY_POINTS, WINDOW_CONCURRENCY,
                     LLM_CONCURRENCY)
 from core.groq_key_pool import load_pool_from_env
 from core.translation_validator import validate_translation
@@ -119,6 +120,7 @@ class LLMManager:
 
     def __init__(self):
         self.api_base = VLLM_API_BASE
+        self._iam_tokens = {}          # api key -> IAMTokenCache (watsonx SaaS only)
         self.model_id = LLM_MODEL_PATH
         self.client = httpx.Client(timeout=3600.0)  # no static auth — key injected per request
         self.term_corrector = self._load_term_corrector()
@@ -230,6 +232,43 @@ class LLMManager:
         except:
             return False
 
+    # ── backend shape: OpenAI-compatible by default, watsonx native when a project id is set ──
+    @staticmethod
+    def _endpoint(base: str) -> str:
+        """watsonx's NATIVE chat lives at /ml/v1/text/chat and needs an API version; everything else
+        this service talks to — vLLM, Groq, OpenRouter, and watsonx's own OpenAI-compatible model
+        gateway — answers on /chat/completions."""
+        base = (base or "").rstrip("/")
+        if WATSONX_PROJECT_ID:
+            return f"{base}/ml/v1/text/chat?version={WATSONX_VERSION}"
+        return f"{base}/chat/completions"
+
+    @staticmethod
+    def _shape_payload(payload: dict) -> dict:
+        """Rename the two fields watsonx native spells differently. Everything else — messages,
+        max_tokens, temperature, top_p, response_format — carries the same names, so the rest of the
+        pipeline, including JSON-schema extraction, is untouched."""
+        if not WATSONX_PROJECT_ID:
+            return payload
+        shaped = dict(payload)
+        shaped["model_id"] = shaped.pop("model", None)
+        shaped["project_id"] = WATSONX_PROJECT_ID
+        shaped.pop("provider", None)          # an OpenRouter-only field
+        return shaped
+
+    def _bearer(self, key: str) -> str:
+        """The Authorization value for `key`. A SaaS IBM Cloud API key is not a bearer token — it is
+        exchanged for one that expires — so in IAM mode the pool still rotates the API KEY and this
+        returns a live token for it. Anything else (Zen key, OpenRouter, Groq, local) is sent as-is.
+        """
+        if LLM_AUTH_MODE != "iam":
+            return key
+        cache = self._iam_tokens.get(key)
+        if cache is None:
+            from core.ibm_auth import IAMTokenCache
+            cache = self._iam_tokens[key] = IAMTokenCache(key, iam_url=IBM_IAM_URL)
+        return cache.token()
+
     def generate(self, system_prompt: str, user_message: str, max_new_tokens: int, temperature: float,
                  frequency_penalty: float = 0.0, presence_penalty: float = 0.0,
                  model: str = None, api_base: str = None, extra: dict = None) -> str:
@@ -238,7 +277,8 @@ class LLMManager:
         the MoM path sets them >0 for non-English to prevent CJK repetition loops.
         model/api_base default to the configured pair — the MoM path overrides them when a long
         transcript is routed to the big-context model (see _route)."""
-        url = f"{(api_base or self.api_base)}/chat/completions"
+        base = api_base or self.api_base
+        url = self._endpoint(base)
 
         payload = {
             "model": model or self.model_id,
@@ -259,8 +299,9 @@ class LLMManager:
         # quantisation: five identical calls hit Parasail, Crusoe, Novita and DeepInfra. That is
         # an uncontrolled variable in both output quality and any accuracy measurement taken from
         # it, so a deployment that cares about consistency names one host and stays on it.
-        if LLM_PROVIDER_ORDER and "openrouter" in (api_base or self.api_base).lower():
+        if LLM_PROVIDER_ORDER and "openrouter" in base.lower():
             payload.setdefault("provider", {"order": LLM_PROVIDER_ORDER, "allow_fallbacks": False})
+        payload = self._shape_payload(payload)
 
         RETRY_DELAYS = [3, 8, 20]
         key, key_idx = self._get_key()
@@ -268,7 +309,8 @@ class LLMManager:
         for attempt in range(4):
             try:
                 logger.info(f"[GroqPool] Using key #{key_idx} (...{key[-4:]})")
-                response = self.client.post(url, json=payload, headers={"Authorization": f"Bearer {key}"})
+                response = self.client.post(url, json=payload,
+                                            headers={"Authorization": f"Bearer {self._bearer(key)}"})
                 response.raise_for_status()
                 choice = response.json()["choices"][0]
                 msg = choice["message"]
