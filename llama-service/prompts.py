@@ -139,13 +139,16 @@ What qualifies (use ANY of these signals):
   ✓ Explicit agreement (Hindi/Hinglish): "toh yeh decide hua ki...", "hum X karenge", "theek hai X kar lete hain", "sab agree hain", "chalo X karte hain", "X ho jayega", "yeh plan hai"
   ✓ Shared conclusion: "so we'll do X", "okay so X is the plan", "we should X", "toh plan yeh hai", "hum sab milke X karenge"
   ✓ Accepted suggestion: someone proposes X, and others say "okay", "yes", "sure", "agreed", "theek hai", "haan", "bilkul", "sahi hai", or do not object
-  ✓ Direct task assignment accepted by the owner: "tera kaam yeh hai...", "tu X kar", "aap X karoge"
-  ✓ Milestone or version announcements confirmed by the speaker: "we have increased X from N to M", "we now support X", "we have achieved X%" — these are factual updates that belong in DECISIONS as confirmed outcomes.
   ✓ CROSS-REFERENCE RULE 1: If your SUMMARY paragraph mentions any decision, conclusion, or agreed plan — it MUST appear here too.
   ✓ CROSS-REFERENCE RULE 2: If ACTION ITEMS contains a task that was assigned because of a group agreement, the underlying group agreement IS a decision and MUST appear here too.
   ✓ CROSS-REFERENCE RULE 3: If SPEAKER-WISE NOTES mentions that someone proposed something and others agreed — that IS a decision.
 What does NOT qualify:
   ✗ A single person's unilateral statement of intent ("I will do X", "main X karunga") — that is an ACTION ITEM, not a decision. A decision requires at least implied agreement from another person.
+  ✗ A task someone will carry out, even when assigned by name and accepted ("tu X kar" → "theek hai") — that is an
+    ACTION ITEM. If the group agreed the plan behind it, record THAT agreement here, worded as what was settled,
+    never as the task. The same sentence must not appear in both lists.
+  ✗ A status, milestone or progress update ("we increased X from N to M", "we now support X", "the deadline is April")
+    — that is a KEY POINT. A decision is something this meeting settled, not a fact it reported.
   ✗ A speaker describing their own ongoing work or personal goals during self-introduction (e.g. "my task today is to save time in generating AI" — this is background context, NOT a meeting decision)
   ✗ A suggestion that was explicitly rejected or left open with no response
   ✗ Pre-existing plans not discussed in this meeting
@@ -159,12 +162,14 @@ What qualifies:
   ✓ Tasks where someone explicitly committed (Hindi/Hinglish): "main karunga/karungi...", "main le leta hoon", "haan main kar leta hoon", "theek hai main karunga"
   ✓ Tasks directly assigned AND verbally accepted by the owner in the transcript
   ✓ Direct assignments accepted without objection: "tu X kar" → owner says "theek hai" or "okay"
+  ✓ A task the group takes on with no single owner ("everyone should review X", "let's all post our dates",
+    "hum sab X karenge") — include it and leave assigned_to EMPTY rather than guessing a name. Most real tasks in a
+    team meeting look like this; dropping them is the most common way minutes lose their value.
   ✓ Direct assignments by name where the transcript ends or cuts off before a response — include as a task with "Assigned to: [name]" since the assignment was explicitly made (e.g. "Nikhil, aap dekhna ki kuch log sales ke log mil jaayein" — Nikhil is assigned this even if no explicit acceptance follows)
 What does NOT qualify:
   ✗ Suggestions or recommendations not accepted by anyone ("maybe someone should...", "koi kar sakta hai...")
   ✗ Personal goals or resolutions mentioned casually
   ✗ Pre-existing ongoing work not newly assigned in this meeting
-  ✗ Tasks discussed but where no one confirmed ownership
 Special case — incomplete transcript: If a task assignment starts but the transcript cuts off before completion, still include it as:
     task: [Partial task — full details unclear in transcript]
     assigned_to: [name if mentioned, else ""]
@@ -286,12 +291,14 @@ DECISIONS TAKEN:
 • MANDATORY: If ACTION ITEMS has entries from a group agreement — the underlying agreement MUST appear here too.
 • MANDATORY: If SPEAKER-WISE NOTES mentions someone proposed something and others agreed — that IS a decision.
 • Merge duplicates across partials into one entry.
-• Remove only: rejected suggestions, pre-existing plans not discussed here, decisions from previous meetings.
+• Remove: rejected suggestions, pre-existing plans not discussed here, decisions from previous meetings, and
+  anything that is really a task to do (that belongs in ACTION ITEMS) or a status update (a KEY POINT).
 • If truly none after filtering: use an empty decisions array [].
 
 ACTION ITEMS — STRICT:
-• Keep ONLY tasks where someone explicitly committed (English: "I will...", "I'll take that"; Hindi: "main karunga", "theek hai main karunga", "main le leta hoon").
-• Remove inferred, suggested, or unaccepted tasks.
+• Keep tasks someone committed to ("I will...", "main karunga"), tasks assigned by name, AND tasks the group took on
+  with no single owner ("everyone should review X") — leave "Assigned to" blank rather than guessing.
+• Remove only suggestions nobody took up, and work that was already finished.
 • If the same task appears in multiple partials, keep it once with the most complete details.
 • Write task descriptions in English even if spoken in Hindi.
 • "Assigned to": the PERSON WHO MUST DO THE TASK — the one being addressed or instructed, NOT the speaker giving the instruction. E.g. if [Speaker_8] says "Aditya, report to me on Monday" → Assigned to: Aditya. Leave blank if no recipient is named.
@@ -458,11 +465,18 @@ DECISIONS_EXTRACTION_PROMPT = """\
 You are a precise meeting analyst. Your ONLY job is to extract decisions from a meeting transcript.
 The transcript may be in English, Hindi, Hinglish (mixed Hindi+English), or a combination. Understand all three languages.
  
-A DECISION is any of the following:
+A DECISION is something this meeting SETTLED — agreed, approved, voted on, or concluded:
 - Someone proposes something AND at least one other person says "okay", "yes", "agreed", "sure", "theek hai", "haan", "bilkul", "sahi hai", or does not object
-- A task directly assigned to someone by name ("your task is...", "tera kaam yeh hai...", "tu X kar", "aap X karoge")
+- A formal vote or motion that carried ("motion passed", "seconded", "passes unanimously")
 - A group plan everyone agrees to follow ("let's all do X", "we will X", "chalo X karte hain", "hum sab X karenge", "yeh plan hai")
 - Any conclusion the group reaches by end of meeting ("toh yeh decide hua", "X ho jayega", "theek hai X kar lete hain")
+
+A DECISION IS NOT:
+- A task someone will carry out, even when assigned by name and accepted — that is an ACTION ITEM. Where the group
+  agreed the plan behind a task, write the AGREEMENT here ("the council agreed to enter the tolling agreement"),
+  never the task ("Nick will contact the HOA"). The same sentence must not appear as both.
+- A status, milestone or progress update ("the deadline is April", "we now support X") — that is a discussion point.
+- Something decided before this meeting, or a suggestion nobody took up.
  
 Output ONLY a bullet list in ENGLISH. Each bullet = one decision. No explanations.
 Example:
@@ -559,21 +573,26 @@ FIRST — identify real speaker names:
   Do NOT use generic labels like "speaker_1" or "Speaker_3" when a real name is identifiable.
 
 SECOND — extract action items:
-An ACTION ITEM is a task clearly assigned to or owned by a specific named person. Include ANY of:
+An ACTION ITEM is a task that still has to be DONE after this meeting. An owner is NOT required. Include ANY of:
 - Explicit commitment: "I will", "I'll", "main karunga/karungi", "main kar leta hoon", "main dekh leta hoon"
 - Direct assignment by name: "Rahul, please handle X", "aap X karo", "tu X kar", "yeh tera kaam hai"
 - Implied assignment: a manager/lead assigns a task to a named person and they do not object
 - Volunteer: "let me handle it", "I can do that", "main dekh lunga"
-- Group plan with implied owner: "we will move to phase 3 in the evening" → Owner: Team
+- A task the group takes on with NO single owner: "everyone should review X", "let's all post our dates",
+  "hum sab X karenge" → leave the Owner blank rather than guessing. Most tasks in a team meeting look like this,
+  and dropping them is the most common way minutes lose their value.
+- A task created by a decision: if the group agreed to do X, "do X" is an action item here, and the agreement
+  itself belongs in DECISIONS. Recording both is correct and expected.
 
-EXCLUDE historical actions (things already done), vague goals with no owner, and general suggestions.
+EXCLUDE only: things already finished before this meeting, and suggestions nobody took up.
 
 Write task descriptions in English. Format:
-• Task description — Owner: Name — Due: deadline (or "Not specified")
+• Task description — Owner: Name (or "Not specified") — Due: deadline (or "Not specified")
 
 Example:
 • Prepare the demo — Owner: Riya — Due: Friday
-• Move to phase 3 — Owner: Team — Due: Today evening
+• Review the issue-weight tool and give feedback — Owner: Not specified — Due: Not specified
+• Post your daylight-saving dates on the agenda — Owner: Not specified — Due: Not specified
 
 If there are truly NO action items at all, output exactly: None explicitly stated.
 Do NOT output anything else — no headers, no preamble, no commentary.\
@@ -761,13 +780,16 @@ What qualifies (use ANY of these signals):
   ✓ Explicit agreement (Hindi/Hinglish): "toh yeh decide hua ki...", "hum X karenge", "theek hai X kar lete hain", "sab agree hain", "chalo X karte hain", "X ho jayega", "yeh plan hai"
   ✓ Shared conclusion: "so we'll do X", "okay so X is the plan", "we should X", "toh plan yeh hai", "hum sab milke X karenge"
   ✓ Accepted suggestion: someone proposes X, and others say "okay", "yes", "sure", "agreed", "theek hai", "haan", "bilkul", "sahi hai", or do not object
-  ✓ Direct task assignment accepted by the owner: "tera kaam yeh hai...", "tu X kar", "aap X karoge"
-  ✓ Milestone or version announcements confirmed by the speaker: "we have increased X from N to M", "we now support X", "we have achieved X%" — these are factual updates that belong in DECISIONS as confirmed outcomes.
   ✓ CROSS-REFERENCE RULE 1: If your SUMMARY paragraph mentions any decision, conclusion, or agreed plan — it MUST appear here too.
   ✓ CROSS-REFERENCE RULE 2: If ACTION ITEMS contains a task that was assigned because of a group agreement, the underlying group agreement IS a decision and MUST appear here too.
   ✓ CROSS-REFERENCE RULE 3: If SPEAKER-WISE NOTES mentions that someone proposed something and others agreed — that IS a decision.
 What does NOT qualify:
   ✗ A single person's unilateral statement of intent ("I will do X", "main X karunga") — that is an ACTION ITEM, not a decision. A decision requires at least implied agreement from another person.
+  ✗ A task someone will carry out, even when assigned by name and accepted ("tu X kar" → "theek hai") — that is an
+    ACTION ITEM. If the group agreed the plan behind it, record THAT agreement here, worded as what was settled,
+    never as the task. The same sentence must not appear in both lists.
+  ✗ A status, milestone or progress update ("we increased X from N to M", "we now support X", "the deadline is April")
+    — that is a KEY POINT. A decision is something this meeting settled, not a fact it reported.
   ✗ A speaker describing their own ongoing work or personal goals during self-introduction (e.g. "my task today is to save time in generating AI" — this is background context, NOT a meeting decision)
   ✗ A suggestion that was explicitly rejected or left open with no response
   ✗ Pre-existing plans not discussed in this meeting
@@ -781,12 +803,14 @@ What qualifies:
   ✓ Tasks where someone explicitly committed (Hindi/Hinglish): "main karunga/karungi...", "main le leta hoon", "haan main kar leta hoon", "theek hai main karunga"
   ✓ Tasks directly assigned AND verbally accepted by the owner in the transcript
   ✓ Direct assignments accepted without objection: "tu X kar" → owner says "theek hai" or "okay"
+  ✓ A task the group takes on with no single owner ("everyone should review X", "let's all post our dates",
+    "hum sab X karenge") — include it and leave assigned_to EMPTY rather than guessing a name. Most real tasks in a
+    team meeting look like this; dropping them is the most common way minutes lose their value.
   ✓ Direct assignments by name where the transcript ends or cuts off before a response — include as a task with "Assigned to: [name]" since the assignment was explicitly made (e.g. "Nikhil, aap dekhna ki kuch log sales ke log mil jaayein" — Nikhil is assigned this even if no explicit acceptance follows)
 What does NOT qualify:
   ✗ Suggestions or recommendations not accepted by anyone ("maybe someone should...", "koi kar sakta hai...")
   ✗ Personal goals or resolutions mentioned casually
   ✗ Pre-existing ongoing work not newly assigned in this meeting
-  ✗ Tasks discussed but where no one confirmed ownership
 Special case — incomplete transcript: If a task assignment starts but the transcript cuts off before completion, still include it as:
   • [Partial task — full details unclear in transcript]
     Assigned to: [name if mentioned, else leave blank]
@@ -934,12 +958,14 @@ DECISIONS TAKEN:
 • MANDATORY: If ACTION ITEMS has entries from a group agreement — the underlying agreement MUST appear here too.
 • MANDATORY: If SPEAKER-WISE NOTES mentions someone proposed something and others agreed — that IS a decision.
 • Merge duplicates across partials into one entry.
-• Remove only: rejected suggestions, pre-existing plans not discussed here, decisions from previous meetings.
+• Remove: rejected suggestions, pre-existing plans not discussed here, decisions from previous meetings, and
+  anything that is really a task to do (that belongs in ACTION ITEMS) or a status update (a KEY POINT).
 • If truly none after filtering: None explicitly stated.
 
 ACTION ITEMS — STRICT:
-• Keep ONLY tasks where someone explicitly committed (English: "I will...", "I'll take that"; Hindi: "main karunga", "theek hai main karunga", "main le leta hoon").
-• Remove inferred, suggested, or unaccepted tasks.
+• Keep tasks someone committed to ("I will...", "main karunga"), tasks assigned by name, AND tasks the group took on
+  with no single owner ("everyone should review X") — leave "Assigned to" blank rather than guessing.
+• Remove only suggestions nobody took up, and work that was already finished.
 • If the same task appears in multiple partials, keep it once with the most complete details.
 • Write task descriptions in English even if spoken in Hindi.
 • "Assigned to": the PERSON WHO MUST DO THE TASK — the one being addressed or instructed, NOT the speaker giving the instruction. E.g. if [Speaker_8] says "Aditya, report to me on Monday" → Assigned to: Aditya. Leave blank if no recipient is named.
