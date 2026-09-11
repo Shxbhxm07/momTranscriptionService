@@ -11,20 +11,12 @@ spec:
     spec:
       containers:
       - name: nemo
-        image: REGISTRY/offline-mom-nemo:1.0.0
+        image: offline-mom-nemo
         ports: [{containerPort: 8003}]
-        envFrom: [{configMapRef: {name: mom-config}}]
+        # Model FILE paths, SPEAKER_CLEANUP and ENABLE_SPEAKER_ENROLLMENT come from the ConfigMap.
+        # By name NeMo downloads its models from NVIDIA, which fails offline.
+        envFrom: [{configMapRef: {name: offline-mom-config}}]
         env:
-        # Local model FILES. By name, NeMo downloads these from NVIDIA on first start, which fails
-        # on an offline cluster. Verified to load and diarize with networking disabled.
-        - {name: DIARIZATION_MODEL_PATH, value: /models/nemo/titanet-l.nemo}
-        - {name: VAD_MODEL_PATH, value: /models/nemo/vad_multilingual_marblenet.nemo}
-        - {name: NEMO_CACHE_DIR, value: /tmp/nemo-cache}
-        # Optional cluster clean-up (merge over-splits, drop noise clusters). Off reproduces the
-        # diarization every MoM accuracy figure was measured on; enable only after an A/B.
-        - {name: SPEAKER_CLEANUP, value: "false"}
-        # Recognising pre-registered voices needs Qdrant; diarization never does.
-        - {name: ENABLE_SPEAKER_ENROLLMENT, value: "false"}
         - {name: NVIDIA_VISIBLE_DEVICES, value: all}
         - {name: NVIDIA_DRIVER_CAPABILITIES, value: "compute,utility"}
         resources:
@@ -38,13 +30,9 @@ spec:
           exec: {command: ["python", "-c", "import urllib.request,sys; sys.exit(0 if b'\"nemo_loaded\":true' in urllib.request.urlopen('http://localhost:8003/health',timeout=5).read() else 1)"]}
           initialDelaySeconds: 30
           periodSeconds: 15
-        livenessProbe:
-          httpGet: {path: /health, port: 8003}
-          initialDelaySeconds: 180
-          periodSeconds: 30
-          failureThreshold: 5
+        livenessProbe: {httpGet: {path: /health, port: 8003}, initialDelaySeconds: 180, periodSeconds: 30, failureThreshold: 5}
       volumes:
-      - {name: models, persistentVolumeClaim: {claimName: mom-models, readOnly: true}}
+      - {name: models, persistentVolumeClaim: {claimName: offline-mom-models, readOnly: true}}
       - {name: scratch, emptyDir: {}}
 ---
 apiVersion: v1

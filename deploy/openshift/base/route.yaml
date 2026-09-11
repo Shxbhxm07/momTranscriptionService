@@ -1,0 +1,13 @@
+# Only needed if something outside the cluster calls the API directly (e.g. /translate-document).
+# The timeout annotation is REQUIRED: the router default is 30 s, and a MoM or a long document takes
+# minutes, so without it every real request is cut off with a 504.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: transcribe-api
+  annotations:
+    haproxy.router.openshift.io/timeout: 3600s
+spec:
+  to: {kind: Service, name: transcribe-api}
+  port: {targetPort: 8000}
+  tls: {termination: edge}

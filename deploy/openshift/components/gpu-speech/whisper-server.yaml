@@ -11,13 +11,10 @@ spec:
     spec:
       containers:
       - name: whisper
-        image: REGISTRY/offline-mom-whisper:1.0.0
+        image: offline-mom-whisper
         ports: [{containerPort: 8080}]
-        env:
-        - {name: WHISPER_MODEL, value: /models/whisper/ggml-large-v3.bin}
-        - {name: WHISPER_VAD_MODEL, value: /models/whisper/ggml-silero-v6.2.0.bin}
-        - {name: WHISPER_THREADS, value: "8"}
-        - {name: NVIDIA_VISIBLE_DEVICES, value: all}
+        envFrom: [{configMapRef: {name: offline-mom-config}}]   # WHISPER_MODEL, WHISPER_VAD_MODEL, WHISPER_THREADS
+        env: [{name: NVIDIA_VISIBLE_DEVICES, value: all}]
         resources:
           requests: {cpu: "2", memory: 4Gi}
           limits: {memory: 8Gi, nvidia.com/gpu: 1}      # ~4.2 GB of GPU memory in use
@@ -25,7 +22,7 @@ spec:
         # whisper.cpp binds its port only after the model is on the GPU, so port-open = ready.
         readinessProbe: {tcpSocket: {port: 8080}, initialDelaySeconds: 20, periodSeconds: 10}
         livenessProbe: {tcpSocket: {port: 8080}, initialDelaySeconds: 120, periodSeconds: 30, failureThreshold: 5}
-      volumes: [{name: models, persistentVolumeClaim: {claimName: mom-models, readOnly: true}}]
+      volumes: [{name: models, persistentVolumeClaim: {claimName: offline-mom-models, readOnly: true}}]
 ---
 apiVersion: v1
 kind: Service

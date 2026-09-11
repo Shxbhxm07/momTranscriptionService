@@ -12,17 +12,16 @@ spec:
     spec:
       containers:
       - name: llama
-        image: REGISTRY/offline-mom-llama:1.0.0
+        image: offline-mom-llama
         ports: [{containerPort: 8001}]
         envFrom:
-        - {configMapRef: {name: mom-config}}
-        - {secretRef: {name: mom-secrets}}
+        - configMapRef: {name: offline-mom-config}
+        - secretRef: {name: offline-mom-secrets}
         resources:
           requests: {cpu: 500m, memory: 512Mi}
           limits: {memory: 2Gi}
-        # "/" is a static route. It stays answerable while a meeting is being processed because the
-        # blocking handlers run off the event loop — earlier they froze it and the probe failed
-        # 16 times in a row on a perfectly healthy job.
+        # "/" is static and stays answerable while a meeting is processed — the blocking handlers
+        # run off the event loop (they once froze it and failed this probe 16 times in a row).
         readinessProbe: {httpGet: {path: /, port: 8001}, initialDelaySeconds: 5, periodSeconds: 10}
         livenessProbe: {httpGet: {path: /, port: 8001}, initialDelaySeconds: 20, periodSeconds: 30, failureThreshold: 5}
 ---

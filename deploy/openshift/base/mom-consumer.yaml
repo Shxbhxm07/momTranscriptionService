@@ -14,17 +14,17 @@ spec:
       terminationGracePeriodSeconds: 3600   # SIGTERM finishes the meeting in hand before exiting
       containers:
       - name: consumer
-        image: REGISTRY/offline-mom-api:1.0.0
+        image: offline-mom-api
         command: ["python", "/app/consumer.py"]
         envFrom:
-        - {configMapRef: {name: mom-config}}
-        - {secretRef: {name: mom-secrets}}
+        - configMapRef: {name: offline-mom-config}
+        - secretRef: {name: offline-mom-secrets}
         resources:
           requests: {cpu: 250m, memory: 256Mi}
           limits: {memory: 1Gi}
         volumeMounts: [{name: scratch, mountPath: /tmp}]
-        # No web server here. The poll loop touches this file at least every 5 s — including while a
-        # long meeting runs — so a file older than 2 minutes means the loop itself is stuck.
+        # No web server. The poll loop touches this file at least every 5 s — including while a long
+        # meeting runs — so a file older than 2 minutes means the loop itself is stuck.
         livenessProbe:
           exec: {command: ["sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/consumer-alive) )) -lt 120"]}
           initialDelaySeconds: 60

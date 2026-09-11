@@ -1,0 +1,9 @@
+# Model weights, ~3.2 GB, copied once (DEPLOY.md step 3) and read-only afterwards.
+# ReadWriteMany lets whisper and NeMo run on different nodes; with ReadWriteOnce, keep both on one node.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: offline-mom-models
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources: {requests: {storage: 5Gi}}

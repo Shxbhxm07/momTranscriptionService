@@ -12,11 +12,11 @@ spec:
     spec:
       containers:
       - name: api
-        image: REGISTRY/offline-mom-api:1.0.0
+        image: offline-mom-api
         ports: [{containerPort: 8000}]
         envFrom:
-        - {configMapRef: {name: mom-config}}
-        - {secretRef: {name: mom-secrets}}
+        - configMapRef: {name: offline-mom-config}
+        - secretRef: {name: offline-mom-secrets}
         resources:
           requests: {cpu: "1", memory: 1Gi}
           limits: {memory: 4Gi}    # headroom for audio decoding and OCR of large PDFs
@@ -30,17 +30,3 @@ apiVersion: v1
 kind: Service
 metadata: {name: transcribe-api}
 spec: {selector: {app: transcribe-api}, ports: [{port: 8000, targetPort: 8000}]}
----
-# Only needed if something outside the cluster calls the API directly (e.g. /translate-document).
-# The timeout annotation is REQUIRED: the router's default is 30 s, and a MoM or a long document
-# takes minutes, so without it every real request is cut off with a 504.
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: transcribe-api
-  annotations:
-    haproxy.router.openshift.io/timeout: 3600s
-spec:
-  to: {kind: Service, name: transcribe-api}
-  port: {targetPort: 8000}
-  tls: {termination: edge}

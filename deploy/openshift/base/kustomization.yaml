@@ -1,0 +1,13 @@
+# BASE — the services that need no GPU. Speech (whisper + NeMo) is added by
+# components/gpu-speech in the overlay that runs it on OCP; the split overlay points at the GB10.
+#
+# Configuration reaches every container through ONE ConfigMap, offline-mom-config, built by the
+# overlay from its offline-mom.env. Credentials come from the offline-mom-secrets Secret, which is
+# created out of band and never committed (see ../secrets.example.env).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - transcribe-api.yaml
+  - llama-service.yaml
+  - mom-consumer.yaml
+  - route.yaml

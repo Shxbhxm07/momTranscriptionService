@@ -34,3 +34,6 @@ audio_out/
 # Shared by IAF as a reference for their model-calling pattern. Another team's code, and it names
 # their internal WatsonX host — not ours to publish.
 query_enhancement*.py
+
+# Filled-in OpenShift credentials (deploy/openshift/secrets.example.env). Never commit.
+secrets.env

@@ -1,0 +1,32 @@
+# ibm-ocp-gpu — everything on OCP, speech on OCP GPUs, LLM on IBM watsonx.
+#
+# Apply:
+#   oc apply -k deploy/openshift/overlays/ibm-ocp-gpu
+#   oc rollout restart deployment -n offline-mom
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# NOT the mom-ai namespace. llama-service, nemo-service and whisper-server are also mom-ai's names:
+# applied there, these Deployments would REPLACE the running mom-ai app. Change it only to another
+# dedicated namespace.
+namespace: offline-mom
+
+resources:
+  - ../../base
+components:
+  - ../../components/gpu-speech
+# Build the offline-mom-config ConfigMap from the env file. Kustomize appends a content hash to the
+# name and rewrites every `configMapRef: offline-mom-config` to match, so any edit to the env file
+# triggers a rollout on its own — no image rebuild.
+configMapGenerator:
+  - name: offline-mom-config
+    behavior: create
+    envs:
+      - offline-mom.env
+
+# Where the images live. CHANGE newName to your registry; the tag is the bundle version.
+images:
+  - {name: offline-mom-api,     newName: CHANGE_ME_REGISTRY/offline-mom-api,     newTag: "1.0.0"}
+  - {name: offline-mom-llama,   newName: CHANGE_ME_REGISTRY/offline-mom-llama,   newTag: "1.0.0"}
+  - {name: offline-mom-whisper, newName: CHANGE_ME_REGISTRY/offline-mom-whisper, newTag: "1.0.0"}
+  - {name: offline-mom-nemo,    newName: CHANGE_ME_REGISTRY/offline-mom-nemo,    newTag: "1.0.0"}
