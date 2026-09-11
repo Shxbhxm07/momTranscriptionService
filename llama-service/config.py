@@ -42,18 +42,31 @@ LLM_LONG_THRESHOLD_TOKENS = int(os.getenv("LLM_LONG_THRESHOLD_TOKENS", "5000"))
 # hosts running different quantisations. Ignored for a local vLLM.
 LLM_PROVIDER_ORDER = [p.strip() for p in os.getenv("LLM_PROVIDER_ORDER", "").split(",") if p.strip()]
 
-# ── IBM watsonx.ai ────────────────────────────────────────────────────────────────────────────────
-# Two ways in, and WATSONX_PROJECT_ID is the switch. watsonx exposes an OpenAI-compatible
-# /chat/completions through its model gateway, which needs nothing here beyond VLLM_API_BASE and a
-# key. The NATIVE API is a different shape — model_id/project_id, and the token budget carried as
-# max_tokens on a /ml/v1/text/chat URL — so setting a project id selects that shape.
-# Auth: a SaaS IBM Cloud API key must be exchanged for an IAM token that expires (LLM_AUTH_MODE=iam,
-# see core/ibm_auth.py); an on-prem Zen key is long-lived and uses the ordinary key path (bearer).
+# ── IBM watsonx ───────────────────────────────────────────────────────────────────────────────────
+# Two deployments and three request shapes, so VLLM_API_BASE carries the FULL endpoint for watsonx
+# (it already includes ?version=...), and the shape is read from its path:
+#   .../ml/v1/text/chat        → messages + choices, like OpenAI. Keeps JSON-schema extraction.
+#   .../ml/v1/text/generation  → a single `input` string, answer in results[0].generated_text.
+#                                No structured output: the JSON has to survive on prompt + repair.
+#   anything else              → OpenAI-compatible /chat/completions (vLLM, OpenRouter, Groq, and
+#                                watsonx's own model gateway).
+# The IAF cluster is Cloud Pak for Data with a self-signed certificate, hence LLM_VERIFY_SSL.
 WATSONX_PROJECT_ID = os.getenv("WATSONX_PROJECT_ID", "").strip()
-WATSONX_VERSION    = os.getenv("WATSONX_VERSION", "2024-10-08").strip()
+WATSONX_VERSION    = os.getenv("WATSONX_VERSION", "2023-05-29").strip()
 IBM_IAM_URL        = os.getenv("IBM_IAM_URL", "https://iam.cloud.ibm.com/identity/token").strip()
+CP4D_AUTH_URL      = os.getenv("CP4D_AUTH_URL", "").strip()
+CP4D_USERNAME      = os.getenv("CP4D_USERNAME", "").strip()
+CP4D_API_KEY       = os.getenv("CP4D_API_KEY", "").strip()
+CP4D_TOKEN_TTL     = int(os.getenv("CP4D_TOKEN_TTL", "3600"))
+# Self-signed certs are normal on an on-prem OpenShift cluster; the reference integration disables
+# verification for both the token and the inference call.
+LLM_VERIFY_SSL     = os.getenv("LLM_VERIFY_SSL", "true").lower() == "true"
+# bearer: send the key as-is (vLLM, OpenRouter, Groq, a CP4D Zen key)
+# cp4d:   username + api_key -> /icp4d-api/v1/authorize   (the IAF cluster)
+# iam:    IBM Cloud apikey grant                          (watsonx SaaS)
 LLM_AUTH_MODE      = (os.getenv("LLM_AUTH_MODE", "").strip().lower()
-                      or ("iam" if "ml.cloud.ibm.com" in (VLLM_API_BASE or "") else "bearer"))
+                      or ("cp4d" if CP4D_AUTH_URL else
+                          "iam" if "ml.cloud.ibm.com" in (VLLM_API_BASE or "") else "bearer"))
 
 # REASONING MODELS spend part of the output allowance "thinking" before they write, so every
 # budget below has to cover the thinking AND the answer. This was inferred from the model NAME,

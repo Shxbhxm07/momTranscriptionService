@@ -11,7 +11,8 @@ from config import (APP_MODE, LLM_MODEL_PATH, VLLM_API_BASE, MAX_INPUT_TOKENS,
                     MAX_NEW_TOKENS_EXTRACTION, MAX_NEW_TOKENS_CLASSIFY, MOM_MERGE_ITEMS, MOM_VERIFY_DECISIONS,
                     LLM_MODEL_LONG, VLLM_API_BASE_LONG, LLM_LONG_THRESHOLD_TOKENS,
                     MODEL_CONTEXT_LIMIT_LONG, LLM_PROVIDER_ORDER, WATSONX_PROJECT_ID,
-                    WATSONX_VERSION, IBM_IAM_URL, LLM_AUTH_MODE, MOM_WINDOW_KEY_POINTS, WINDOW_CONCURRENCY,
+                    WATSONX_VERSION, IBM_IAM_URL, LLM_AUTH_MODE, LLM_VERIFY_SSL,
+                    CP4D_AUTH_URL, CP4D_USERNAME, CP4D_API_KEY, CP4D_TOKEN_TTL, MOM_WINDOW_KEY_POINTS, WINDOW_CONCURRENCY,
                     LLM_CONCURRENCY)
 from core.groq_key_pool import load_pool_from_env
 from core.translation_validator import validate_translation
@@ -122,7 +123,9 @@ class LLMManager:
         self.api_base = VLLM_API_BASE
         self._iam_tokens = {}          # api key -> IAMTokenCache (watsonx SaaS only)
         self.model_id = LLM_MODEL_PATH
-        self.client = httpx.Client(timeout=3600.0)  # no static auth — key injected per request
+        # verify=False is needed for an on-prem cluster with a self-signed certificate; the
+        # reference IAF integration disables it for both the token call and inference.
+        self.client = httpx.Client(timeout=3600.0, verify=LLM_VERIFY_SSL)  # key injected per request
         self.term_corrector = self._load_term_corrector()
 
     @staticmethod
@@ -232,42 +235,110 @@ class LLMManager:
         except:
             return False
 
-    # ── backend shape: OpenAI-compatible by default, watsonx native when a project id is set ──
+    # ── backend shapes ────────────────────────────────────────────────────────────────────────────
+    # Three request shapes, chosen by the endpoint path, so switching backend is configuration:
+    #   /ml/v1/text/chat        watsonx chat      messages + choices, keeps JSON-schema extraction
+    #   /ml/v1/text/generation  watsonx generate  one `input` string, answer in results[0]
+    #   anything else           OpenAI-compatible vLLM, OpenRouter, Groq, watsonx model gateway
     @staticmethod
     def _endpoint(base: str) -> str:
-        """watsonx's NATIVE chat lives at /ml/v1/text/chat and needs an API version; everything else
-        this service talks to — vLLM, Groq, OpenRouter, and watsonx's own OpenAI-compatible model
-        gateway — answers on /chat/completions."""
+        """A watsonx URL is configured COMPLETE — it carries ?version=... — so it is used as given."""
         base = (base or "").rstrip("/")
-        if WATSONX_PROJECT_ID:
+        if "/ml/v1/" in base:
+            return base
+        if WATSONX_PROJECT_ID and "ml.cloud.ibm.com" in base:
             return f"{base}/ml/v1/text/chat?version={WATSONX_VERSION}"
         return f"{base}/chat/completions"
 
     @staticmethod
-    def _shape_payload(payload: dict) -> dict:
-        """Rename the two fields watsonx native spells differently. Everything else — messages,
-        max_tokens, temperature, top_p, response_format — carries the same names, so the rest of the
-        pipeline, including JSON-schema extraction, is untouched."""
-        if not WATSONX_PROJECT_ID:
+    def _shape(url: str) -> str:
+        if "/text/generation" in url:
+            return "generation"
+        if "/text/chat" in url:
+            return "watsonx_chat"
+        return "openai"
+
+    @staticmethod
+    def _flatten(messages) -> str:
+        """Fold a system+user pair into one prompt for the completion-style API, using the Llama 3
+        chat template the reference IAF integration uses. Without the template the model answers the
+        instructions conversationally instead of obeying them."""
+        parts = ["<|begin_of_text|>"]
+        for m in messages:
+            role = m.get("role", "user")
+            parts.append(f"<|start_header_id|>{role}<|end_header_id|>\n{m.get('content', '')}<|eot_id|>")
+        parts.append("<|start_header_id|>assistant<|end_header_id|>\n")
+        return "".join(parts)
+
+    @classmethod
+    def _shape_payload(cls, payload: dict, url: str) -> dict:
+        shape = cls._shape(url)
+        if shape == "openai":
             return payload
-        shaped = dict(payload)
-        shaped["model_id"] = shaped.pop("model", None)
-        shaped["project_id"] = WATSONX_PROJECT_ID
-        shaped.pop("provider", None)          # an OpenRouter-only field
-        return shaped
+        p = dict(payload)
+        p.pop("provider", None)                     # OpenRouter-only
+        if WATSONX_PROJECT_ID:
+            p["project_id"] = WATSONX_PROJECT_ID
+        if shape == "watsonx_chat":
+            p["model_id"] = p.pop("model", None)
+            return p
+        # completion-style: no messages, no structured output. The JSON then has to survive on the
+        # prompt alone, which _parse_points' repair and object-salvage steps already handle.
+        fmt = p.pop("response_format", None)
+        if fmt:
+            logger.debug("[LLM] %s ignores response_format — relying on prompt + JSON repair", url)
+        return {
+            "input": cls._flatten(p.get("messages") or []),
+            "parameters": {
+                "decoding_method": "greedy",
+                "max_new_tokens": p.get("max_tokens", 512),
+                "temperature": p.get("temperature", 0.1),
+                "repetition_penalty": 1.1,
+            },
+            "model_id": p.get("model"),
+            "project_id": WATSONX_PROJECT_ID,
+        }
+
+    @classmethod
+    def _parse_reply(cls, data: dict, url: str):
+        """Return (content, finish_reason) from either response shape."""
+        if cls._shape(url) == "generation":
+            r = (data.get("results") or [{}])[0]
+            stop = r.get("stop_reason")
+            return r.get("generated_text"), ("length" if stop in ("max_tokens", "token_limit") else stop)
+        choice = (data.get("choices") or [{}])[0]
+        return (choice.get("message") or {}).get("content"), choice.get("finish_reason")
+
+    @staticmethod
+    def _budget(payload: dict):
+        return payload.get("max_tokens") or (payload.get("parameters") or {}).get("max_new_tokens")
+
+    @staticmethod
+    def _set_budget(payload: dict, n: int) -> None:
+        if "parameters" in payload:
+            payload["parameters"]["max_new_tokens"] = n
+        else:
+            payload["max_tokens"] = n
 
     def _bearer(self, key: str) -> str:
-        """The Authorization value for `key`. A SaaS IBM Cloud API key is not a bearer token — it is
-        exchanged for one that expires — so in IAM mode the pool still rotates the API KEY and this
-        returns a live token for it. Anything else (Zen key, OpenRouter, Groq, local) is sent as-is.
-        """
-        if LLM_AUTH_MODE != "iam":
-            return key
-        cache = self._iam_tokens.get(key)
-        if cache is None:
-            from core.ibm_auth import IAMTokenCache
-            cache = self._iam_tokens[key] = IAMTokenCache(key, iam_url=IBM_IAM_URL)
-        return cache.token()
+        """The Authorization value for `key`. watsonx credentials are not bearer tokens — they are
+        exchanged for one that expires — so the pool still rotates the KEY and this returns a live
+        token. Anything else (Zen key, OpenRouter, Groq, local vLLM) is sent as-is."""
+        if LLM_AUTH_MODE == "cp4d":
+            cache = self._iam_tokens.get("cp4d")
+            if cache is None:
+                from core.ibm_auth import CP4DTokenCache
+                cache = self._iam_tokens["cp4d"] = CP4DTokenCache(
+                    CP4D_AUTH_URL, CP4D_USERNAME, CP4D_API_KEY or key,
+                    ttl=CP4D_TOKEN_TTL, verify=LLM_VERIFY_SSL)
+            return cache.token()
+        if LLM_AUTH_MODE == "iam":
+            cache = self._iam_tokens.get(key)
+            if cache is None:
+                from core.ibm_auth import IAMTokenCache
+                cache = self._iam_tokens[key] = IAMTokenCache(key, iam_url=IBM_IAM_URL, verify=LLM_VERIFY_SSL)
+            return cache.token()
+        return key
 
     def generate(self, system_prompt: str, user_message: str, max_new_tokens: int, temperature: float,
                  frequency_penalty: float = 0.0, presence_penalty: float = 0.0,
@@ -301,7 +372,7 @@ class LLMManager:
         # it, so a deployment that cares about consistency names one host and stays on it.
         if LLM_PROVIDER_ORDER and "openrouter" in base.lower():
             payload.setdefault("provider", {"order": LLM_PROVIDER_ORDER, "allow_fallbacks": False})
-        payload = self._shape_payload(payload)
+        payload = self._shape_payload(payload, url)
 
         RETRY_DELAYS = [3, 8, 20]
         key, key_idx = self._get_key()
@@ -312,14 +383,12 @@ class LLMManager:
                 response = self.client.post(url, json=payload,
                                             headers={"Authorization": f"Bearer {self._bearer(key)}"})
                 response.raise_for_status()
-                choice = response.json()["choices"][0]
-                msg = choice["message"]
-                if choice.get("finish_reason") == "length":
+                content, finish_reason = self._parse_reply(response.json(), url)
+                if finish_reason == "length":
                     # A cut-off reply used to pass through as if it were complete, and a JSON caller then
                     # saw only a parse error. Say so here, where the cause is actually known.
-                    logger.warning(f"[LLM] reply hit max_tokens={payload['max_tokens']} and was cut off — "
-                                   f"output is incomplete")
-                content = msg.get("content")
+                    logger.warning(f"[LLM] reply hit the {self._budget(payload)}-token limit and was cut "
+                                   f"off — output is incomplete")
                 if content is None:
                     # gpt-oss-120b is a REASONING model: it can spend its ENTIRE output budget on internal
                     # reasoning (sometimes looping) and return {"content": null, "reasoning": "..."} with no
@@ -329,12 +398,14 @@ class LLMManager:
                     # return "" (a clean empty section always beats leaking reasoning).
                     if not retried_budget:
                         retried_budget = True
-                        payload["max_tokens"] = min(int(max_new_tokens) * 2 + 512, 8192)
-                        payload["frequency_penalty"] = max(payload.get("frequency_penalty") or 0.0, 0.4)
-                        payload["presence_penalty"] = max(payload.get("presence_penalty") or 0.0, 0.4)
+                        budget = min(int(max_new_tokens) * 2 + 512, 8192)
+                        self._set_budget(payload, budget)
+                        if "parameters" not in payload:      # penalties are an OpenAI-shape field
+                            payload["frequency_penalty"] = max(payload.get("frequency_penalty") or 0.0, 0.4)
+                            payload["presence_penalty"] = max(payload.get("presence_penalty") or 0.0, 0.4)
                         logger.warning(
-                            "vLLM returned content=None (budget spent reasoning). Retrying once with "
-                            "max_tokens=%d + repetition penalties.", payload["max_tokens"]
+                            "Model returned content=None (budget spent reasoning). Retrying once with a "
+                            "%d-token budget + repetition penalties.", budget
                         )
                         continue
                     logger.error(

@@ -1,107 +1,139 @@
 #!/usr/bin/env python3
-"""Check an IBM watsonx endpoint against everything this pipeline actually needs.
+"""Check an IBM watsonx endpoint against what this pipeline actually needs, before wiring it in.
 
-    IBM_BASE=https://us-south.ml.cloud.ibm.com IBM_APIKEY=... IBM_PROJECT_ID=... \
-    IBM_MODEL=meta-llama/llama-3-3-70b-instruct python3 ibm_check.py
+Cloud Pak for Data (the IAF cluster):
+    CP4D_AUTH_URL=https://cpd-watsonx-imir.apps.ocp4.iaf.in/icp4d-api/v1/authorize \
+    CP4D_USERNAME=... CP4D_API_KEY=... WATSONX_PROJECT_ID=... \
+    WATSONX_HOST=https://cpd-watsonx-imir.apps.ocp4.iaf.in \
+    MODEL_ID=meta-llama/llama-3-3-70b-instruct VERIFY_SSL=false python3 scripts/ibm_check.py
 
-Reports, in order: auth, whether an OpenAI-compatible /chat/completions exists, JSON-schema
-structured output, the json_object fallback, output-limit behaviour, and 2-way concurrency.
-Nothing here is specific to our prompts — it tests the contract llm_manager.generate() relies on.
+IBM Cloud SaaS: set IBM_APIKEY instead of the CP4D_* trio.
+
+The important question it answers: does /ml/v1/text/chat exist? With it we keep JSON-schema
+extraction, which is what makes key points score 92-95. Without it we fall back to
+/ml/v1/text/generation, where the JSON must survive on the prompt and our repair steps alone.
 """
 import json, os, sys, time
 from concurrent.futures import ThreadPoolExecutor
+
 import httpx
 
-BASE = os.getenv("IBM_BASE", "").rstrip("/")
-APIKEY = os.getenv("IBM_APIKEY", "")
-PROJECT = os.getenv("IBM_PROJECT_ID", "")
-MODEL = os.getenv("IBM_MODEL", "meta-llama/llama-3-3-70b-instruct")
-ZEN = os.getenv("IBM_ZEN_APIKEY", "")
-if not BASE or not (APIKEY or ZEN):
-    sys.exit("set IBM_BASE and IBM_APIKEY (or IBM_ZEN_APIKEY)")
+HOST = os.getenv("WATSONX_HOST", "").rstrip("/")
+VERSION = os.getenv("WATSONX_VERSION", "2023-05-29")
+PROJECT = os.getenv("WATSONX_PROJECT_ID", "")
+MODEL = os.getenv("MODEL_ID", "meta-llama/llama-3-3-70b-instruct")
+VERIFY = os.getenv("VERIFY_SSL", "false").lower() == "true"
+if not HOST:
+    sys.exit("set WATSONX_HOST (e.g. https://cpd-watsonx-imir.apps.ocp4.iaf.in)")
 
+client = httpx.Client(timeout=120, verify=VERIFY)
 ok = lambda label, good, note="": print(f"  {'PASS' if good else 'FAIL'}  {label}" + (f"  — {note}" if note else ""))
-client = httpx.Client(timeout=120)
+results = {}
 
-print("\n1. AUTHENTICATION")
-token, mode = None, None
-if ZEN:
-    token, mode = ZEN, "Zen API key (long-lived — our static key pool works as-is)"
-    ok("Zen key supplied", True, mode)
-else:
+print(f"\n1. AUTHENTICATION   (TLS verification {'on' if VERIFY else 'OFF'})")
+token = None
+if os.getenv("CP4D_AUTH_URL"):
+    try:
+        r = client.post(os.getenv("CP4D_AUTH_URL"),
+                        headers={"Content-Type": "application/json", "Accept": "application/json"},
+                        json={"username": os.getenv("CP4D_USERNAME"), "api_key": os.getenv("CP4D_API_KEY")})
+        token = r.json().get("token") if r.status_code == 200 else None
+        ok("CP4D /icp4d-api/v1/authorize", bool(token), f"HTTP {r.status_code}" + ("" if token else f": {r.text[:120]}"))
+    except Exception as e:
+        ok("CP4D authorize", False, repr(e))
+elif os.getenv("IBM_APIKEY"):
     try:
         r = client.post("https://iam.cloud.ibm.com/identity/token",
-                        data={"grant_type": "urn:ibm:params:oauth:grant-type:apikey", "apikey": APIKEY},
+                        data={"grant_type": "urn:ibm:params:oauth:grant-type:apikey", "apikey": os.getenv("IBM_APIKEY")},
                         headers={"Content-Type": "application/x-www-form-urlencoded"})
-        if r.status_code == 200:
-            j = r.json(); token = j["access_token"]; exp = j.get("expires_in", "?")
-            mode = f"IAM token, expires in {exp}s — NEEDS A REFRESHER, our pool assumes static keys"
-            ok("IAM token exchange", True, mode)
-        else:
-            ok("IAM token exchange", False, f"HTTP {r.status_code}: {r.text[:120]}")
+        token = r.json().get("access_token") if r.status_code == 200 else None
+        ok("IBM Cloud IAM token", bool(token), f"expires_in={r.json().get('expires_in')}" if token else r.text[:120])
     except Exception as e:
-        ok("IAM token exchange", False, repr(e))
-    if not token:      # some gateways take the raw API key as the bearer
-        token, mode = APIKEY, "raw API key as bearer (untested above)"
+        ok("IAM token", False, repr(e))
+else:
+    sys.exit("set CP4D_AUTH_URL (+CP4D_USERNAME/CP4D_API_KEY) or IBM_APIKEY")
+if not token:
+    sys.exit("\nNo token — nothing else can be tested.")
+H = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json"}
 
-H = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-body = lambda **kw: {"model": MODEL, "messages": [{"role": "system", "content": "Reply exactly as asked."},
-                                                  {"role": "user", "content": "Reply with the single word: ok"}],
-                     "max_tokens": 20, "temperature": 0.01, **({"project_id": PROJECT} if PROJECT else {}), **kw}
-
-print("\n2. OPENAI-COMPATIBLE ENDPOINT  (decides zero-code vs adapter)")
-url, reply = None, None
-for cand in (f"{BASE}/v1/chat/completions", f"{BASE}/ml/v1/text/chat?version=2024-10-08", f"{BASE}/chat/completions"):
+print("\n2. WHICH ENDPOINTS EXIST   (decides whether we keep structured extraction)")
+chat_url = f"{HOST}/ml/v1/text/chat?version={VERSION}"
+gen_url = f"{HOST}/ml/v1/text/generation?version={VERSION}"
+chat_body = {"model_id": MODEL, "project_id": PROJECT, "max_tokens": 20,
+             "messages": [{"role": "user", "content": "Reply with the single word: ok"}]}
+gen_body = {"model_id": MODEL, "project_id": PROJECT,
+            "input": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\nReply with the single word: ok<|eot_id|>"
+                     "<|start_header_id|>assistant<|end_header_id|>\n",
+            "parameters": {"decoding_method": "greedy", "max_new_tokens": 20, "temperature": 0.1}}
+for label, url, body, key in (("chat  /ml/v1/text/chat", chat_url, chat_body, "chat"),
+                              ("gen   /ml/v1/text/generation", gen_url, gen_body, "gen")):
     try:
-        r = client.post(cand, headers=H, json=body())
-        if r.status_code == 200:
-            url, reply = cand, r.json()
-            ok(f"POST {cand}", True, "200")
-            break
-        ok(f"POST {cand}", False, f"HTTP {r.status_code}: {r.text[:100]}")
-    except Exception as e:
-        ok(f"POST {cand}", False, repr(e))
-if not url:
-    sys.exit("\nNo working chat endpoint — send me the exact URL from your IBM console.")
-shape = "choices[0].message.content" if "choices" in (reply or {}) else list((reply or {}).keys())
-ok("OpenAI response shape", "choices" in (reply or {}), f"got {shape}")
-
-print("\n3. STRUCTURED OUTPUT  (window extraction depends on this)")
-schema = {"type": "object", "properties": {"points": {"type": "array", "items": {
-    "type": "object", "properties": {"text": {"type": "string"}, "quote": {"type": "string"}},
-    "required": ["text", "quote"], "additionalProperties": False}}},
-    "required": ["points"], "additionalProperties": False}
-for label, extra in (("response_format=json_schema", {"response_format": {"type": "json_schema", "json_schema": {
-                        "name": "points", "strict": True, "schema": schema}}}),
-                     ("response_format=json_object (fallback)", {"response_format": {"type": "json_object"}})):
-    try:
-        r = client.post(url, headers=H, json={**body(max_tokens=200), "messages": [
-            {"role": "system", "content": "Extract points as JSON with a 'points' array of {text, quote}."},
-            {"role": "user", "content": "The council approved the budget. Nick said it was straightforward."}], **extra})
+        r = client.post(url, headers=H, json=body)
         good = r.status_code == 200
-        parsed = ""
+        results[key] = good
+        text = ""
         if good:
-            c = r.json()["choices"][0]["message"].get("content") or ""
-            try: parsed = f"parsed, {len(json.loads(c).get('points', []))} points"
-            except Exception: parsed = f"not valid JSON: {c[:60]!r}"
-        ok(label, good, parsed if good else f"HTTP {r.status_code}: {r.text[:100]}")
+            d = r.json()
+            text = (d.get("choices", [{}])[0].get("message", {}).get("content")
+                    if "choices" in d else d.get("results", [{}])[0].get("generated_text", ""))
+        ok(label, good, (repr((text or "")[:40]) if good else f"HTTP {r.status_code}: {r.text[:120]}"))
     except Exception as e:
+        results[key] = False
         ok(label, False, repr(e))
 
-print("\n4. OUTPUT LIMIT BEHAVIOUR  (we rely on finish_reason)")
-try:
-    r = client.post(url, headers=H, json={**body(max_tokens=16), "messages": [
-        {"role": "user", "content": "Count slowly from 1 to 200, one number per line."}]})
-    fr = r.json()["choices"][0].get("finish_reason")
-    ok("finish_reason reported on truncation", fr == "length", f"got {fr!r}")
-except Exception as e:
-    ok("finish_reason", False, repr(e))
+if results.get("chat"):
+    print("\n3. STRUCTURED OUTPUT on the chat endpoint   (window extraction depends on this)")
+    schema = {"type": "object", "properties": {"points": {"type": "array", "items": {
+        "type": "object", "properties": {"text": {"type": "string"}, "quote": {"type": "string"}},
+        "required": ["text", "quote"], "additionalProperties": False}}},
+        "required": ["points"], "additionalProperties": False}
+    for label, fmt in (("response_format=json_schema", {"type": "json_schema", "json_schema": {
+                            "name": "points", "strict": True, "schema": schema}}),
+                       ("response_format=json_object (fallback)", {"type": "json_object"})):
+        try:
+            r = client.post(chat_url, headers=H, json={**chat_body, "max_tokens": 200, "response_format": fmt,
+                "messages": [{"role": "system", "content": "Extract points as JSON: {'points':[{'text','quote'}]}"},
+                             {"role": "user", "content": "The council approved the budget. Nick called it straightforward."}]})
+            good = r.status_code == 200
+            note = ""
+            if good:
+                c = r.json()["choices"][0]["message"].get("content") or ""
+                try: note = f"parsed, {len(json.loads(c).get('points', []))} points"
+                except Exception: note = f"not valid JSON: {c[:50]!r}"
+            ok(label, good, note or f"HTTP {r.status_code}: {r.text[:100]}")
+        except Exception as e:
+            ok(label, False, repr(e))
+else:
+    print("\n3. STRUCTURED OUTPUT — skipped, no chat endpoint")
 
-print("\n5. CONCURRENCY  (we run 2 calls at once; more is faster if allowed)")
+print("\n4. TRUNCATION SIGNAL   (we log and recover from cut-off replies)")
+try:
+    if results.get("chat"):
+        r = client.post(chat_url, headers=H, json={**chat_body, "max_tokens": 16,
+            "messages": [{"role": "user", "content": "Count from 1 to 200, one per line."}]})
+        fr = r.json()["choices"][0].get("finish_reason")
+    else:
+        b = json.loads(json.dumps(gen_body)); b["parameters"]["max_new_tokens"] = 16
+        b["input"] = b["input"].replace("Reply with the single word: ok", "Count from 1 to 200, one per line.")
+        r = client.post(gen_url, headers=H, json=b)
+        fr = r.json()["results"][0].get("stop_reason")
+    ok("reports why it stopped", fr in ("length", "max_tokens", "token_limit"), f"got {fr!r}")
+except Exception as e:
+    ok("truncation signal", False, repr(e))
+
+print("\n5. CONCURRENCY   (we run 2 calls at once)")
+url, body = (chat_url, chat_body) if results.get("chat") else (gen_url, gen_body)
 def one(_):
-    t = time.time(); r = client.post(url, headers=H, json=body()); return r.status_code, time.time() - t
+    t = time.time(); r = client.post(url, headers=H, json=body); return r.status_code, time.time() - t
 with ThreadPoolExecutor(max_workers=2) as ex: res = list(ex.map(one, range(2)))
 ok("2 concurrent calls", all(s == 200 for s, _ in res), ", ".join(f"{s} in {d:.1f}s" for s, d in res))
 
-print(f"\nSUMMARY\n  endpoint: {url}\n  auth: {mode}\n  model: {MODEL}")
-print("  → zero-code path if section 2 and 3 passed: set VLLM_API_BASE, LLM_MODEL_PATH, GROQ_API_KEYS and restart.")
+print("\nCONFIGURE THIS")
+if results.get("chat"):
+    print(f"  VLLM_API_BASE={chat_url}          ← keeps JSON-schema extraction")
+elif results.get("gen"):
+    print(f"  VLLM_API_BASE={gen_url}     ← no structured output; JSON rests on prompt + repair")
+else:
+    print("  neither endpoint answered — send me the exact URL and a sample response")
+print(f"  WATSONX_PROJECT_ID={PROJECT or '<project id>'}\n  LLM_MODEL_PATH={MODEL}\n"
+      f"  LLM_AUTH_MODE={'cp4d' if os.getenv('CP4D_AUTH_URL') else 'iam'}\n  LLM_VERIFY_SSL={'true' if VERIFY else 'false'}")

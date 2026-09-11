@@ -1,58 +1,78 @@
-# Running the MoM writer on IBM watsonx.ai
+# Running the MoM writer on IBM watsonx
 
 Whisper and NeMo stay local. Only the LLM endpoint moves.
 
-## Which of the two paths you are on
+Modelled on the working reference integration in `query_enhancement 2.py`: the IAF deployment is
+**Cloud Pak for Data on OpenShift**, not IBM Cloud SaaS, which changes three things — the token
+issuer, the certificate, and the request shape.
 
-watsonx offers an **OpenAI-compatible `/chat/completions`** through its *model gateway*, and a
-**native API** at `/ml/v1/text/chat`. `WATSONX_PROJECT_ID` is the switch: set it and the service
-talks native, leave it empty and it talks OpenAI-compatible (the same code path as OpenRouter,
-Groq and a local vLLM).
+## Step 1 — find out which endpoint the cluster has
 
-Run this first — it answers the question in about a minute:
-
-    IBM_BASE=https://us-south.ml.cloud.ibm.com IBM_APIKEY=<key> \
-    IBM_PROJECT_ID=<project> IBM_MODEL=meta-llama/llama-3-3-70b-instruct \
+    CP4D_AUTH_URL=https://cpd-watsonx-imir.apps.ocp4.iaf.in/icp4d-api/v1/authorize \
+    CP4D_USERNAME=<user> CP4D_API_KEY=<key> WATSONX_PROJECT_ID=<project> \
+    WATSONX_HOST=https://cpd-watsonx-imir.apps.ocp4.iaf.in \
+    MODEL_ID=meta-llama/llama-3-3-70b-instruct VERIFY_SSL=false \
     python3 scripts/ibm_check.py
 
-It checks authentication, which chat URL answers, JSON-schema output, the `json_object` fallback,
-truncation reporting (`finish_reason`), and two concurrent calls.
+It authenticates, probes **both** `/ml/v1/text/chat` and `/ml/v1/text/generation`, tests JSON-schema
+output, checks the truncation signal and two concurrent calls, then prints the configuration to use.
 
-## A. Model gateway (OpenAI-compatible) — configuration only
+**This is the question that matters.** `/text/chat` takes messages and supports `response_format`,
+so windowed extraction keeps its JSON schema — the mechanism behind key points scoring 92-95.
+`/text/generation` takes one prompt string and has no structured output, so the JSON has to survive
+on the prompt plus our repair and object-salvage parsing. Both work; the first is better.
 
-    VLLM_API_BASE=https://<gateway host>/v1
+## Step 2 — configure
+
+Chat endpoint (preferred):
+
+    VLLM_API_BASE=https://cpd-watsonx-imir.apps.ocp4.iaf.in/ml/v1/text/chat?version=2023-05-29
+
+Generation endpoint (what the reference script uses):
+
+    VLLM_API_BASE=https://cpd-watsonx-imir.apps.ocp4.iaf.in/ml/v1/text/generation?version=2023-05-29
+
+Then, for either:
+
+    WATSONX_PROJECT_ID=<project id>
     LLM_MODEL_PATH=meta-llama/llama-3-3-70b-instruct
-    GROQ_API_KEYS=<ibm api key>          # the variable is historical; it is just the bearer key
-    LLM_PROVIDER_ORDER=                  # OpenRouter-only, leave empty
+    LLM_AUTH_MODE=cp4d                 # auto-selected when CP4D_AUTH_URL is set
+    CP4D_AUTH_URL=https://cpd-watsonx-imir.apps.ocp4.iaf.in/icp4d-api/v1/authorize
+    CP4D_USERNAME=<user>
+    CP4D_API_KEY=<key>
+    CP4D_TOKEN_TTL=3600                # how often to re-authorize
+    LLM_VERIFY_SSL=false               # self-signed cluster certificate
+    LLM_PROVIDER_ORDER=                # OpenRouter-only, leave empty
 
-## B. Native watsonx API
+The watsonx URL is configured COMPLETE, including `?version=`, and the request shape is read from
+its path. Nothing else in the service changes.
 
-    VLLM_API_BASE=https://us-south.ml.cloud.ibm.com
-    WATSONX_PROJECT_ID=<project id>      # setting this selects the native shape
-    WATSONX_VERSION=2024-10-08
-    LLM_MODEL_PATH=meta-llama/llama-3-3-70b-instruct
-    GROQ_API_KEYS=<ibm cloud api key>
-    LLM_AUTH_MODE=iam                    # auto-selected for *.ml.cloud.ibm.com
+## What each shape sends
 
-`model` becomes `model_id`, `project_id` is added, and the OpenRouter-only `provider` field is
-dropped. Everything else — messages, max_tokens, temperature, top_p, response_format — keeps the
-same names, so JSON-schema extraction is unchanged.
+| | chat | generation |
+|---|---|---|
+| model field | `model_id` | `model_id` |
+| prompt | `messages` | one `input` string, Llama 3 chat template |
+| budget | `max_tokens` | `parameters.max_new_tokens` |
+| answer | `choices[0].message.content` | `results[0].generated_text` |
+| structured output | `response_format` honoured | not available |
 
-### Authentication
+## Authentication
 
-A SaaS IBM Cloud API key is **not** a bearer token: it is exchanged for an IAM token that expires,
-usually hourly. `core/ibm_auth.py` caches the token and refreshes it 5 minutes before expiry — the
-margin has to exceed the slowest single call, or a token can expire during a 60-90 s extraction and
-fail it. On-prem Cloud Pak for Data issues a long-lived **Zen key**: set `LLM_AUTH_MODE=bearer` and
-the ordinary key path is used, with no token exchange.
+A CP4D credential is **not** a bearer token. `POST {username, api_key}` to `/icp4d-api/v1/authorize`
+returns `{"token": ...}`, and that token expires. `core/ibm_auth.py` caches it and re-authorizes
+`CP4D_TOKEN_TTL` seconds after issue, refreshing 5 minutes early — the margin must exceed the
+slowest single call, or a token can expire during a 60-90 s extraction and fail it. The response
+carries no expiry, which is why the TTL is configured rather than read.
+
+`LLM_AUTH_MODE=bearer` skips all of it, for a long-lived Zen key or a plain vLLM.
 
 ## After switching, before trusting any number
 
-- **Re-measure the four test meetings.** Every accuracy figure recorded so far came from Llama 3.3
-  70B on DeepInfra via OpenRouter. A different host may serve a different quantisation of the same
-  weights, so scores can move. `scratchpad/m3/MEASURE.md` has the procedure.
-- **Confirm you are pinned to one model build.** OpenRouter silently rotated us across four
-  providers of differing quality until `LLM_PROVIDER_ORDER` pinned one; that variable made accuracy
-  measurements meaningless until it was found.
-- **Check the context limit** on your plan against `MODEL_CONTEXT_LIMIT` (default 32768). The
-  windowed extraction needs roughly 8k in and 1.5k out per call.
+- **Re-measure the four test meetings** (`scratchpad/m3/MEASURE.md`). Every score so far came from
+  Llama 3.3 70B on DeepInfra via OpenRouter; another host may serve a different quantisation.
+- **Check the model is actually served.** The reference script carries a note that
+  `meta-llama/llama-3-1-8b-instruct` was rejected as "not supported" on this cluster, so confirm the
+  70B id before planning around it.
+- **Expect lower structured-output reliability on `/text/generation`** and watch the logs for
+  `needed repair to parse` and `needed objects to parse`.
