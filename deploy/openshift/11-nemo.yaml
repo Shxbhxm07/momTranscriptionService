@@ -20,6 +20,11 @@ spec:
         - {name: DIARIZATION_MODEL_PATH, value: /models/nemo/titanet-l.nemo}
         - {name: VAD_MODEL_PATH, value: /models/nemo/vad_multilingual_marblenet.nemo}
         - {name: NEMO_CACHE_DIR, value: /tmp/nemo-cache}
+        # Optional cluster clean-up (merge over-splits, drop noise clusters). Off reproduces the
+        # diarization every MoM accuracy figure was measured on; enable only after an A/B.
+        - {name: SPEAKER_CLEANUP, value: "false"}
+        # Recognising pre-registered voices needs Qdrant; diarization never does.
+        - {name: ENABLE_SPEAKER_ENROLLMENT, value: "false"}
         - {name: NVIDIA_VISIBLE_DEVICES, value: all}
         - {name: NVIDIA_DRIVER_CAPABILITIES, value: "compute,utility"}
         resources:

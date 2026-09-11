@@ -27,8 +27,13 @@ class SpeakerIdentifier:
       2. Cluster ID  — match per-cluster d-vectors against the enrolled DB
     """
 
-    def __init__(self, model_path: str = "titanet_large"):
-        self.model_path = model_path
+    def __init__(self, model_path: str = None):
+        # The SAME model file the diarizer uses (config.py reads DIARIZATION_MODEL_PATH). This loader
+        # used to hard-code the NAME "titanet_large", and by name NeMo downloads from NVIDIA — so on an
+        # offline cluster the diarizer loaded its local file and then the speaker clean-up step failed
+        # the request with "Not able to download url right now". It only ever worked where a cache
+        # volume already held an earlier download.
+        self.model_path = model_path or os.getenv("DIARIZATION_MODEL_PATH") or "titanet_large"
         self._model = None  # lazy-loaded on first use
 
     # ------------------------------------------------------------------
@@ -43,7 +48,12 @@ class SpeakerIdentifier:
             import torch
             from nemo.collections.asr.models import EncDecSpeakerLabelModel
 
-            self._model = EncDecSpeakerLabelModel.from_pretrained(self.model_path)
+            if self.model_path.endswith(".nemo") and os.path.exists(self.model_path):
+                # A local file is RESTORED; from_pretrained() treats its argument as a catalogue name
+                # and would go to the network even when handed a path.
+                self._model = EncDecSpeakerLabelModel.restore_from(self.model_path, map_location=torch.device("cpu"))
+            else:
+                self._model = EncDecSpeakerLabelModel.from_pretrained(self.model_path)
             # GB10 (sm_121, CUDA 13, NeMo 26.04 container): use GPU — CPU diarization on this chip
             # is ~2 hrs/24min (unusable), GPU ~60s. The old .cpu() pin was for Pascal sm_61 which
             # that NeMo build didn't support; no longer applies. Falls back to CPU if CUDA is down.

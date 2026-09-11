@@ -47,6 +47,8 @@ measured on its own), `ENABLE_TRANSCRIBE_RETRY=true`, `ENABLE_TRANSCRIPT_CORRECT
 | `DIARIZATION_MODEL_PATH` | /models/nemo/titanet-l.nemo | local file — by name it downloads |
 | `VAD_MODEL_PATH` | /models/nemo/vad_multilingual_marblenet.nemo | local file — by name it downloads |
 | `HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE` | 1 | |
+| `SPEAKER_CLEANUP` | false | optional cluster clean-up (merge over-splits, drop noise). **Off is the behaviour every accuracy figure was measured on** — enable only after an A/B on the test meetings |
+| `ENABLE_SPEAKER_ENROLLMENT` | false | recognising pre-registered voices; needs Qdrant. Diarization never does |
 
 ## Document translation (transcribe-api)
 `ENABLE_OCR=true`, `OCR_LANGS=hin+eng`, `MAX_DOC_MB=50`. Formats: PDF (text or scanned), DOCX, DOC, TXT.

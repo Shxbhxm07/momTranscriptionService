@@ -48,6 +48,10 @@ def _to_wav_ffmpeg(src: str, dst: str) -> bool:
         return False
 
 
+ENABLE_SPEAKER_ENROLLMENT = os.getenv("ENABLE_SPEAKER_ENROLLMENT", "false").strip().lower() == "true"
+SPEAKER_CLEANUP = os.getenv("SPEAKER_CLEANUP", "false").strip().lower() == "true"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global diarizer_engine
@@ -60,15 +64,26 @@ async def lifespan(app: FastAPI):
 
         base_cfg = get_base_cfg()
         diarizer_engine = DiarizerEngine(base_cfg)
-        init_speaker_db()
-
         logger.info("✓ NeMo configuration loaded")
         logger.info("✓ Diarization service ready")
-        logger.info("✓ Speaker enrollment DB ready")
     except Exception as e:
         logger.error(f"Startup error: {e}")
         import traceback
         logger.error(traceback.format_exc())
+
+    # Speaker ENROLLMENT (recognising pre-registered voices) needs Qdrant; diarization does not. They
+    # shared one try block, so an offline cluster with no Qdrant logged "Startup error" plus a full
+    # traceback on every start and skipped the success messages — while diarization worked fine.
+    # A genuine model-load failure looked identical. Enrollment is off unless asked for, and when it
+    # is on, an unreachable Qdrant is a warning about that feature, not a startup error.
+    if ENABLE_SPEAKER_ENROLLMENT:
+        try:
+            init_speaker_db()
+            logger.info("✓ Speaker enrollment DB ready")
+        except Exception as e:
+            logger.warning(f"Speaker enrollment unavailable (Qdrant: {e}) — diarization is unaffected")
+    else:
+        logger.info("Speaker enrollment disabled (ENABLE_SPEAKER_ENROLLMENT=false) — diarization only")
     yield
     logger.info("Shutting down...")
 
@@ -472,21 +487,31 @@ async def diarize(
         # clean-up is removing NOISE/phantom clusters, decided by a COUNT-INDEPENDENT acoustic fact:
         # a real speaker's voiceprint matches SOME other human (~0.3-0.6); a noise cluster matches
         # everyone at ~0. That test is identical whether the meeting has 2 or 8 people — no tuning.
-        cluster_embs = speaker_identifier.extract_cluster_embeddings(audio_path, segments)
-        # Self-calibrating clean-up: MERGE over-splits + DROP noise from THIS meeting's own cosine
-        # distribution (no fixed bar). Set SELF_CALIBRATE_CLUSTERS=false to roll back to the old
-        # fixed-threshold drop for an A/B on identical audio.
-        if os.getenv("SELF_CALIBRATE_CLUSTERS", "true").strip().lower() == "true":
-            segments, cluster_embs, _calib = speaker_identifier.calibrate_clusters(segments, cluster_embs)
-        else:
-            segments, cluster_embs = speaker_identifier.drop_noise_clusters(segments, cluster_embs)
-        cleaned_speakers = len(set(s["speaker"] for s in segments))
-        if cleaned_speakers != found_speakers:
-            logger.info(f"✓ After cluster clean-up: {cleaned_speakers} speakers (was {found_speakers})")
-            found_speakers = cleaned_speakers
+        # CLUSTER CLEAN-UP IS OPT-IN (SPEAKER_CLEANUP). This source runs it on every request, but the
+        # image every MoM accuracy figure was measured on (built 2026-07-29) ran it only inside the
+        # identify branch — so for identify=false, which is all the MoM API ever sends, it never ran.
+        # Shipping it on by default would change speaker counts, and through them the attendees and
+        # speaker naming, in a way nobody has measured. Off by default reproduces what was measured;
+        # turn it on only after an A/B on the test meetings.
+        cluster_embs = None
+        if SPEAKER_CLEANUP:
+            cluster_embs = speaker_identifier.extract_cluster_embeddings(audio_path, segments)
+            # Self-calibrating clean-up: MERGE over-splits + DROP noise from THIS meeting's own cosine
+            # distribution (no fixed bar). Set SELF_CALIBRATE_CLUSTERS=false to roll back to the old
+            # fixed-threshold drop for an A/B on identical audio.
+            if os.getenv("SELF_CALIBRATE_CLUSTERS", "true").strip().lower() == "true":
+                segments, cluster_embs, _calib = speaker_identifier.calibrate_clusters(segments, cluster_embs)
+            else:
+                segments, cluster_embs = speaker_identifier.drop_noise_clusters(segments, cluster_embs)
+            cleaned_speakers = len(set(s["speaker"] for s in segments))
+            if cleaned_speakers != found_speakers:
+                logger.info(f"✓ After cluster clean-up: {cleaned_speakers} speakers (was {found_speakers})")
+                found_speakers = cleaned_speakers
 
         speaker_map = {}
-        if identify:
+        if identify and ENABLE_SPEAKER_ENROLLMENT:
+            if cluster_embs is None:          # identification needs voiceprints even without clean-up
+                cluster_embs = speaker_identifier.extract_cluster_embeddings(audio_path, segments)
             enrolled_count = len(get_all_speakers())
             if enrolled_count > 0:
                 logger.info(f"Identifying against {enrolled_count} enrolled profile(s)…")
