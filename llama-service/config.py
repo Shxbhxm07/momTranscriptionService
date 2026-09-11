@@ -114,6 +114,11 @@ MAX_NEW_TOKENS_CLASSIFY   = 512 if _IS_REASONING else 16
 # cannot contain a statement the meeting did not make. Set to false to restore the previous
 # narrative-plus-fills behaviour.
 MOM_WINDOW_KEY_POINTS = os.getenv("MOM_WINDOW_KEY_POINTS", "true").lower() == "true"
+
+# Ask the model which extracted entries describe the same work, then merge them in code. Lexical dedupe
+# cannot see that "revise and re-record the LEP course" and "the revised script will be recorded
+# tomorrow" are one task — measured 2026-09-11, LEP carried 19 action items for 12 real ones.
+MOM_MERGE_ITEMS = os.getenv("MOM_MERGE_ITEMS", "true").lower() == "true"
 # Windows are independent HTTP calls; the limit is provider rate limiting, not this box.
 # 2, not 4: four concurrent window calls tripped OpenRouter's rate limit, the 429 exhausted its
 # retries, and the whole request fell through to the legacy pipeline — which returns no

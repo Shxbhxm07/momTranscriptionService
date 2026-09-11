@@ -8,13 +8,13 @@ import time
 
 from config import (APP_MODE, LLM_MODEL_PATH, VLLM_API_BASE, MAX_INPUT_TOKENS,
                     MAX_NEW_TOKENS_PER_CHUNK, MAX_NEW_TOKENS_SYNTHESIS, MODEL_CONTEXT_LIMIT,
-                    MAX_NEW_TOKENS_EXTRACTION, MAX_NEW_TOKENS_CLASSIFY,
+                    MAX_NEW_TOKENS_EXTRACTION, MAX_NEW_TOKENS_CLASSIFY, MOM_MERGE_ITEMS,
                     LLM_MODEL_LONG, VLLM_API_BASE_LONG, LLM_LONG_THRESHOLD_TOKENS,
                     MODEL_CONTEXT_LIMIT_LONG, LLM_PROVIDER_ORDER, MOM_WINDOW_KEY_POINTS, WINDOW_CONCURRENCY,
                     LLM_CONCURRENCY)
 from core.groq_key_pool import load_pool_from_env
 from core.translation_validator import validate_translation
-from prompts import MEETING_ANALYSIS_PROMPT, SYNTHESIS_PROMPT, MEETING_ANALYSIS_PROMPT_JSON, SYNTHESIS_PROMPT_JSON, SPEAKER_MAPPING_PROMPT, DECISIONS_EXTRACTION_PROMPT, KEY_POINTS_EXTRACTION_PROMPT, WINDOW_EXTRACTION_PROMPT, SUMMARY_FROM_POINTS_PROMPT, FIGURES_EXTRACTION_PROMPT, TRANSCRIPT_CORRECTION_PROMPT, TRANSLATED_TRANSCRIPT_CORRECTION_PROMPT, ACTION_ITEMS_EXTRACTION_PROMPT, MEETING_TYPE_CLASSIFY_PROMPT, TEMPLATE_FOCUS
+from prompts import MEETING_ANALYSIS_PROMPT, SYNTHESIS_PROMPT, MEETING_ANALYSIS_PROMPT_JSON, SYNTHESIS_PROMPT_JSON, SPEAKER_MAPPING_PROMPT, DECISIONS_EXTRACTION_PROMPT, KEY_POINTS_EXTRACTION_PROMPT, WINDOW_EXTRACTION_PROMPT, SUMMARY_FROM_POINTS_PROMPT, FIGURES_EXTRACTION_PROMPT, TRANSCRIPT_CORRECTION_PROMPT, ITEMS_MERGE_PROMPT, TRANSLATED_TRANSCRIPT_CORRECTION_PROMPT, ACTION_ITEMS_EXTRACTION_PROMPT, MEETING_TYPE_CLASSIFY_PROMPT, TEMPLATE_FOCUS
 from utils.text_utils import chunk_transcript, clean_mom_output, preprocess_transcript
 from localization.mom_i18n import parse_and_validate, parse_content, render_mom, GLOSSARY_DNT, GLOSSARY_TERMS
 
@@ -778,6 +778,9 @@ class LLMManager:
         content["action_items"] = self._drop_unsupported_names(
             content.get("action_items") or [], text, "ACTION ITEMS", get=lambda a: a.get("task", ""))
         content = self._normalise_action_items(content)
+        if MOM_MERGE_ITEMS:
+            content = self._merge_duplicate_items(content, "action_items", temperature, route)
+            content = self._merge_duplicate_items(content, "decisions", temperature, route)
         content = self._reconcile_attendees(content, text)
         content = self._ground_attendee_roles(content, text)
         content = self._rewrite_summary_json(content, temperature, route)
@@ -1005,6 +1008,63 @@ class LLMManager:
         s = (name or "").strip().strip("[]").strip().lower()
         m = re.match(r"speaker[\s_-]*(\d+)$", s)
         return f"speaker_{m.group(1)}" if m else s
+
+    _MERGE_SCHEMA = {
+        "type": "object",
+        "properties": {"groups": {"type": "array", "items": {"type": "array", "items": {"type": "integer"}}}},
+        "required": ["groups"], "additionalProperties": False,
+    }
+
+    def _merge_duplicate_items(self, content, field, temperature, route=None):
+        """Merge entries describing the same work. The MODEL only groups numbers; the CODE decides what
+        survives, so nothing can be reworded or invented while "merging".
+
+        Word-overlap dedupe cannot see that "Revise and re-record the LEP course" and "The revised script
+        will be recorded tomorrow" are one task — they share almost no words. Measured 2026-09-11, LEP came
+        back with 19 action items for 12 real ones, the surplus being three wordings of the same work.
+        Whether two tasks are the same is a judgement, which is what the model is for and the regexes are not.
+        """
+        items = [x for x in (content.get(field) or []) if x]
+        if len(items) < 2:
+            return content
+        text_of = (lambda x: x if isinstance(x, str) else (x or {}).get("task", ""))
+        owner_of = (lambda x: "" if isinstance(x, str) else (x.get("assigned_to") or ""))
+        listing = "\n".join(f"{i + 1}. {text_of(x)}" for i, x in enumerate(items))
+        try:
+            raw = self.generate(
+                ITEMS_MERGE_PROMPT, f"ENTRIES:\n{listing}", MAX_NEW_TOKENS_EXTRACTION, temperature,
+                model=(route or {}).get("model"), api_base=(route or {}).get("api_base"),
+                extra={"response_format": {"type": "json_schema", "json_schema": {
+                    "name": "groups", "strict": True, "schema": self._MERGE_SCHEMA}}},
+            )
+            groups = (json.loads(raw) or {}).get("groups") or []
+        except Exception as e:
+            logger.warning(f"[MOM] {field.upper()}: duplicate merge failed ({e!r}) — keeping every entry")
+            return content
+
+        dropped, notes = set(), []
+        for group in groups:
+            idx = sorted({i - 1 for i in group if isinstance(i, int) and 1 <= i <= len(items)})
+            idx = [i for i in idx if i not in dropped]
+            if len(idx) < 2:
+                continue
+            # Keep the entry that says the most: one with an owner beats one without, then the longest text.
+            keep = max(idx, key=lambda i: (bool(owner_of(items[i])), len(text_of(items[i]))))
+            for i in idx:
+                if i == keep:
+                    continue
+                if isinstance(items[keep], dict) and isinstance(items[i], dict):
+                    for f in ("assigned_to", "assigned_by", "due"):      # a duplicate may carry the detail
+                        if not (items[keep].get(f) or "").strip():
+                            items[keep][f] = items[i].get(f) or ""
+                dropped.add(i)
+                notes.append(f"{text_of(items[i])[:60]!r} → {text_of(items[keep])[:60]!r}")
+        if dropped:
+            logger.info(f"[MOM] {field.upper()}: merged {len(dropped)} duplicate(s) of {len(items)}")
+            for n in notes[:6]:
+                logger.info(f"[MOM]   {n}")
+        content[field] = [x for i, x in enumerate(items) if i not in dropped]
+        return content
 
     def _reconcile_attendees(self, content, transcript):
         """Remove attendees the transcript cannot support — WITHOUT pairing names to speaker labels.

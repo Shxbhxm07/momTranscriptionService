@@ -1076,3 +1076,29 @@ MEETING TYPE — ONE-ON-ONE (manager and one report). Keep the same output struc
 - Decisions: agreements on goals, priorities, or support to be provided.
 Be factual and capture commitments and follow-ups clearly.""",
 }
+
+
+ITEMS_MERGE_PROMPT = """\
+You are given a numbered list of entries taken from ONE meeting. Some describe the SAME piece of work in
+different words, because they were found by different passes over the transcript.
+
+Group the duplicates. Two entries belong in the same group ONLY if carrying out one of them also carries out
+the other — the same work, the same deliverable.
+
+  SAME (group them):
+    1. Revise and re-record the LEP course
+    5. The revised script will be recorded tomorrow
+    9. Review and finalize the revised LEP course script
+  DIFFERENT (do NOT group):
+    2. Send the I Speak guides to Culp          ← sending guides
+    7. Develop training materials for vendors   ← different deliverable
+    3. Attend the back-end weekly call          ← attending
+    8. Suggest ideas for the back-end call      ← contributing ideas
+
+A stricter test when unsure: if one could be finished while the other is still outstanding, they are
+DIFFERENT. When in doubt, leave them apart — wrongly splitting is a small flaw, wrongly merging loses work.
+
+Return ONLY the numbers, as JSON: {"groups": [[1, 5, 9], [2, 6]]}
+List a group only when it has two or more entries. An entry with no duplicate appears in no group.
+If nothing is duplicated, return {"groups": []}.\
+""".strip()
