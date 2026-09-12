@@ -45,6 +45,7 @@ measured on its own), `ENABLE_TRANSCRIBE_RETRY=true`, `ENABLE_TRANSCRIPT_CORRECT
 |---|---|---|
 | `WHISPER_MODEL` | /models/whisper/ggml-large-v3.bin | local file |
 | `WHISPER_VAD_MODEL` | /models/whisper/ggml-silero-v6.2.0.bin | local file |
+| `WHISPER_MAX_CONTEXT` | 0 | text context carried between decodes. **0 is load-bearing**: measured 2026-09-12, the default (-1) makes every request after the server's first degenerate into a repetition loop — the same sentence up to 296 times. With 0 the same audio returns identical text every time, in half the time. Do not raise it |
 | `DIARIZATION_MODEL_PATH` | /models/nemo/titanet-l.nemo | local file — by name it downloads |
 | `VAD_MODEL_PATH` | /models/nemo/vad_multilingual_marblenet.nemo | local file — by name it downloads |
 | `HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE` | 1 | |
