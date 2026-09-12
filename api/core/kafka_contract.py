@@ -36,6 +36,9 @@ class KafkaJob:
     file_urls: List[str] = field(default_factory=list)
     file_fids: List[str] = field(default_factory=list)
     document_names: List[str] = field(default_factory=list)
+    # Optional details for the Word minutes that no recording contains: classification, file
+    # reference, address, secretary, distribution and so on (see docs/kafka-contract.md).
+    mom_meta: Dict[str, Any] = field(default_factory=dict)
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -45,6 +48,10 @@ class KafkaJob:
     @property
     def has_ingested(self) -> bool:
         return bool(self.file_fids or self.document_ids)
+
+
+def _dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def parse_job(msg: Dict[str, Any]) -> KafkaJob:
@@ -58,6 +65,7 @@ def parse_job(msg: Dict[str, Any]) -> KafkaJob:
         file_urls=list(_get(msg, "file_urls", "fileUrls", default=[]) or []),
         file_fids=list(_get(msg, "file_fids", "fileFids", "fIds", default=[]) or []),
         document_names=list(_get(msg, "document_names", "documentNames", default=[]) or []),
+        mom_meta=_dict(_get(msg, "mom_meta", "momMeta", default={})),
         raw=msg,
     )
 

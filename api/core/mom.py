@@ -344,6 +344,11 @@ def to_mom_response(result: Dict[str, Any]) -> Dict[str, Any]:
         # `formatted` text — unreadable to anything but a human.
         "key_figures": [f for f in _as_list(content.get("key_figures")) if isinstance(f, str) and f.strip()],
         "purpose": content.get("purpose", "") or "",
+        # Only when the meeting itself states them; the prompt leaves them empty otherwise. The Word
+        # export needs them because a JSSD minutes title must give the date, time and place.
+        "meeting_date": header.get("meeting_date", "") or "",
+        "meeting_time": header.get("meeting_time", "") or "",
+        "venue": header.get("venue", "") or "",
         # The fully rendered, human-readable minutes document (headings, bullets, footer).
         # This is what the MoM product actually showed users; keeping it means a caller can
         # display finished minutes without re-assembling them from the fields above.

@@ -93,7 +93,7 @@ def process(job, store: ObjectStore, index: MomIndex) -> dict:
         if not mom:
             raise RuntimeError(body.get("note") or "no minutes produced")
 
-        docx_bytes = build_mom_docx(mom)
+        docx_bytes = build_mom_docx(mom, job.mom_meta)
         bucket, key = store.upload(summary_object_key(job, hashlib.md5(docx_bytes).hexdigest()),
                                    docx_bytes, DOCX_MIME)
         index.index_mom(job, mom, source="attached", summary_bucket=bucket, summary_object_key=key)
