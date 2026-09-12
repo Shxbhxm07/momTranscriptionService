@@ -105,11 +105,20 @@ def build_ack(job: KafkaJob, *, success: bool, description: str,
     desc = " ".join((description or "").split())
     if len(desc) > _MAX_DESCRIPTION:
         desc = desc[:_MAX_DESCRIPTION - 1].rsplit(" ", 1)[0] + "…"
+    # The backend's own fields come back on every ack, success or failure, so it can match the
+    # answer to the request. Three are returned untouched; two are ours to fill in, which is what
+    # the backend asked for by sending them empty:
+    #   path           where the minutes were stored, "bucket/key", the same shape as the audio
+    #                  path it sends us. Left as received when there is no file (a failure).
+    #   conversationId the job's id, which also names the Elasticsearch document.
+    echo = dict(job.echo)
+    if "conversationId" in echo or job.conversation_id:
+        echo["conversationId"] = job.conversation_id or echo.get("conversationId", "")
+    if "path" in echo and success and bucket and object_key:
+        echo["path"] = f"{bucket}/{object_key}"
+
     ack: Dict[str, Any] = {
-        # The backend's fields first, byte for byte as they arrived — including on FAILURE, so it
-        # can match the answer to the request it sent. Our own fields never overwrite them: they
-        # have different names, and the minutes' location goes in summaryBucketName/ObjectKey.
-        **job.echo,
+        **echo,
         "fileIds": job.document_ids,
         "tenantId": job.tenant_id,
         "compareMode": job.compare_mode,

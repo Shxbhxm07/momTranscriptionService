@@ -30,10 +30,17 @@ crash mid-job re-delivers the meeting instead of losing it.
 Both spellings are accepted for every field (`tenant_id`/`tenantId`, `conversationId`/`conversation_id`,
 `file_urls`/`fileUrls`…), because the reference messages mix them.
 
-**Fields the backend sends come back untouched.** `accessVar`, `userId`, `isUser`, `path` and
-`conversationId` are copied into every acknowledgement, success or failure, with the same value and
-the same JSON type — `isUser: true` returns as a boolean, `isUser: "true"` as that string. Our own
-fields never collide with them: the minutes' location is `summaryBucketName` / `summaryObjectKey`.
+**Fields the backend sends come back on every acknowledgement**, success or failure, so it can match
+the answer to its request. Three are returned untouched, two are filled in:
+
+| field | on the way back |
+|---|---|
+| `accessVar`, `userId`, `isUser` | exactly as sent, same value and same JSON type — `isUser: true` returns a boolean, `isUser: "true"` returns that string. Never parsed; `accessVar` is treated as opaque |
+| `path` | where the minutes were stored, as `bucket/key` — the same shape as the audio path it sends us. Unchanged on failure, since there is no file |
+| `conversationId` | the job's id, which is also the Elasticsearch document id |
+
+Our own fields never collide with those: the minutes' location is also given as
+`summaryBucketName` / `summaryObjectKey`.
 
 **Where the .docx is written** is `{tenantId}/summaries/{hash}.docx`. With no `tenant_id` the
 `conversationId` takes its place, then `userId`, so a key never begins with a slash.
