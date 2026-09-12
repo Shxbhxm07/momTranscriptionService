@@ -164,21 +164,20 @@ class TranscriptionEngine:
             "translate": "true" if translate else "false",
             "beam_size": str(safe_beam),
             "temperature": str(float(TEMPERATURE)),
-            # BOUNDED context — this value has a failure mode on EITHER side of it, both
-            # measured on real recordings. Do not change it without re-running both:
-            #
-            #   max_context=0 (too little): the decoder loses its anchor on a long window.
-            #     A 54s clip came back as ONE 21s segment containing a YouTube artifact
-            #     instead of the speech — ~45% of the content silently lost.
-            #
-            #   max_context=64+ (too much): the decoder echoes. A 19.7-minute session
-            #     produced 60.9% duplicate lines, one line repeated 290 times, and the loop
-            #     BLOCKED progress — the entire second half was never transcribed at all.
-            #
-            #   max_context=32: clean on BOTH. 19.7-min → 0% duplicates; 54s → no
-            #     hallucination, every phrase recovered.
-            "max_context": str(MAX_CONTEXT),
         }
+
+        # BOUNDED context. 32 was chosen when both neighbours failed on this stack: 0 lost ~45% of
+        # a 54s clip, and 64+ echoed one line 290 times and blocked the second half of a meeting.
+        #
+        # RE-MEASURED 2026-09-12 on whisper.cpp v1.8.4, because at beam 1 this value looked harmful:
+        # the first request after a server restart returned 571 of 2164 words, later runs varied,
+        # and omitting it gave the same 2164 words four times out of four. AT BEAM 5 — what this
+        # code actually sends — none of that appears: 2230 / 2188 / 2096 words with 32 against
+        # 2228 / 2241 / 2250 without, no truncation and no repetition either way, and on a second
+        # meeting the value scored higher (2436 vs 2318). So it stays. The beam-1 failure is real
+        # but belongs to a configuration we do not use, and matters only if BEAM_SIZE is lowered.
+        if MAX_CONTEXT is not None:
+            data["max_context"] = str(MAX_CONTEXT)
 
         # NOTE: no `prompt` / initial_prompt is sent, and that is deliberate. The MoM
         # service's HINGLISH_PROMPT existed to make whisper PRESERVE code-switching

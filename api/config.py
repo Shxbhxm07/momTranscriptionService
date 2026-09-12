@@ -79,7 +79,10 @@ REFINE_TIMEOUT = int(os.getenv("REFINE_TIMEOUT", "900"))
 # ── decoding parameters (all measured on this stack — see comments in core/engine.py) ──
 BEAM_SIZE = int(os.getenv("BEAM_SIZE", "5"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
-MAX_CONTEXT = int(os.getenv("MAX_CONTEXT", "32"))
+# 32, unchanged — see the re-measurement in core/engine.py. Set MAX_CONTEXT to an empty string to
+# send nothing at all, which is only useful for measuring; it is not better at the beam we use.
+_max_context = os.getenv("MAX_CONTEXT", "32").strip()
+MAX_CONTEXT = int(_max_context) if _max_context else None
 
 # ── audio preprocessing ──────────────────────────────────────────────────────
 # Normalisation to 16 kHz mono PCM is NOT optional. whisper-server decodes audio with

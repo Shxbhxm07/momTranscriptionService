@@ -109,18 +109,13 @@ EXPOSE 8080
 # -l auto: detect the language rather than forcing one. Forcing "hi" on English audio was
 # measured to transliterate it into Devanagari and trigger hallucination loops, so auto is
 # load-bearing, not a default.
-# -mc 0: DO NOT carry text context between decodes. Load-bearing, measured 2026-09-12 on this
-# machine: with the default (-1, unlimited) the server's FIRST request is clean and every request
-# after it degenerates into a repetition loop — the same sentence 296, 248 and 140 times on three
-# consecutive runs of one 9-minute meeting. The pipeline always sends a short language-detect clip
-# first, so in production every real transcription was one of the degraded ones. With -mc 0 the
-# same audio returns byte-identical text every time, no loops, in half the time (34 s vs 70-92 s),
-# and it recovered a passage the old setting dropped. -mc 64 was also tried and is far worse: it
-# returned a quarter of the meeting.
+# Context is NOT set here. A value sent with the request overrides whatever the server was
+# started with, and transcribe-api sends one per request — so a flag here would reach nothing
+# but the language probe. The setting that matters is MAX_CONTEXT in api/config.py, which after
+# the 2026-09-12 measurement sends nothing at all.
 CMD ["sh", "-c", "exec whisper-server \
   -m ${WHISPER_MODEL} \
   -vm ${WHISPER_VAD_MODEL} \
   --host 0.0.0.0 --port 8080 \
   --inference-path /inference \
-  -l auto -t ${WHISPER_THREADS:-8} \
-  -mc ${WHISPER_MAX_CONTEXT:-0}"]
+  -l auto -t ${WHISPER_THREADS:-8}"]
