@@ -15,6 +15,15 @@ spec:
         ports: [{containerPort: 8080}]
         envFrom: [{configMapRef: {name: offline-mom-config}}]   # WHISPER_MODEL, WHISPER_VAD_MODEL, WHISPER_THREADS
         env: [{name: NVIDIA_VISIBLE_DEVICES, value: all}]
+        # The start command is repeated here, not left to the image, so the -mc fix reaches a
+        # cluster running an image built before it — no rebuild, no 20 GB to ship.
+        # -mc 0 = keep no text context between requests. With the default, only the first request
+        # after startup is clean and every later one degenerates into a repetition loop: measured
+        # 2026-09-12, the same sentence 296, 248 and 140 times on three runs of one meeting. The
+        # pipeline sends a language-detect clip first, so every real transcription was a later one.
+        command: ["sh", "-c", "exec whisper-server -m ${WHISPER_MODEL} -vm ${WHISPER_VAD_MODEL}
+          --host 0.0.0.0 --port 8080 --inference-path /inference
+          -l auto -t ${WHISPER_THREADS:-8} -mc ${WHISPER_MAX_CONTEXT:-0}"]
         resources:
           requests: {cpu: "2", memory: 4Gi}
           limits: {memory: 8Gi, nvidia.com/gpu: 1}      # ~4.2 GB of GPU memory in use
