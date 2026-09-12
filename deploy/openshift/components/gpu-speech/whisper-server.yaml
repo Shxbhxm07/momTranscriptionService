@@ -14,7 +14,11 @@ spec:
         image: offline-mom-whisper
         ports: [{containerPort: 8080}]
         envFrom: [{configMapRef: {name: offline-mom-config}}]   # WHISPER_MODEL, WHISPER_VAD_MODEL, WHISPER_THREADS
-        env: [{name: NVIDIA_VISIBLE_DEVICES, value: all}]
+        # Both are needed for the GPU operator to inject the node's driver into the pod;
+        # without the capabilities one the container cannot load libcuda.so.1.
+        env:
+        - {name: NVIDIA_VISIBLE_DEVICES, value: all}
+        - {name: NVIDIA_DRIVER_CAPABILITIES, value: "compute,utility"}
         # The start command is repeated here, not left to the image, so the -mc fix reaches a
         # cluster running an image built before it — no rebuild, no 20 GB to ship.
         # -mc 0 = keep no text context between requests. With the default, only the first request

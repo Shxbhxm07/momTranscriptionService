@@ -92,6 +92,14 @@ RUN --mount=type=bind,from=builder,source=/src/build,target=/wb \
 ENV LD_LIBRARY_PATH=/opt/whisper/lib:/usr/local/cuda/lib64
 ENV PATH=/opt/whisper/bin:$PATH
 
+# WITHOUT THESE THE GPU IS INVISIBLE. The NVIDIA container runtime injects the node's driver
+# (libcuda.so.1) only for containers that ask for it, and the old vLLM base declared them for us.
+# A plain Ubuntu base does not, so on OpenShift the pod started and died with
+#   "error while loading shared libraries: libcuda.so.1: cannot open shared object file".
+# `docker run --gpus all` hides this: the flag sets both, which is why it worked on the GB10.
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
 # Where the mounted model is expected. Overridable so a customer can mount elsewhere.
 ENV WHISPER_MODEL=/models/ggml-large-v3.bin
 ENV WHISPER_VAD_MODEL=/models/ggml-silero-v6.2.0.bin
