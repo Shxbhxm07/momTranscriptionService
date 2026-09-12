@@ -179,6 +179,10 @@ Document translation:
 - **NeMo's cluster clean-up (`SPEAKER_CLEANUP`) is off.** The current code can merge over-split speakers
   and drop noise clusters, but every accuracy figure was measured without it, so it ships off. Turning it
   on changes speaker counts and, through them, attendees and speaker naming — A/B it on the test meetings first.
+- **No GPU on the cluster?** `whisper-service/Dockerfile.cpu` builds a 107 MB processor-only Whisper
+  image: no CUDA, no NVIDIA base, runs on any node. Measured on the GB10: 7.6 min for a 9.3-minute
+  meeting on 8 threads (the GPU takes 40 s), same model and settings, so accuracy is comparable.
+  The alternative is the `ibm-ocp-to-gb10` shape, where OCP calls a GPU box over the LAN.
 - **The Whisper image is ~1 GB** (2026-09-12). It builds on NVIDIA's vLLM base and runs on plain
   Ubuntu, carrying only whisper-server and the three CUDA libraries it links against. The previous
   19.8 GB image ran on the build base itself. Transcripts are byte-identical; a 9-minute meeting takes
