@@ -53,7 +53,7 @@ Edit `overlays/<shape>/offline-mom.env` and run `oc apply -k` again. The ConfigM
 hash of its contents, so the Deployments see a new name and roll by themselves. To force a restart
 anyway: `oc rollout restart deployment -n offline-mom`.
 
-Testing without IBM: point three lines at OpenRouter and add its key to the Secret as `GROQ_API_KEYS`:
+Testing without IBM: point three lines at OpenRouter and add its key to the Secret as `LLM_API_KEY`:
 
     VLLM_API_BASE=https://openrouter.ai/api/v1
     LLM_MODEL_PATH=meta-llama/llama-3.3-70b-instruct

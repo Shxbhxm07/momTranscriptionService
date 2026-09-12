@@ -66,13 +66,20 @@ class GroqKeyPool:
             }
 
 
-def load_pool_from_env(multi_var="GROQ_API_KEYS"):
-    """Build a GroqKeyPool from GROQ_API_KEYS (comma-separated).
-    Returns None if the variable is unset or yields no valid keys.
-    Duplicate keys are silently removed."""
-    raw = os.getenv(multi_var, "")
-    keys = list(dict.fromkeys(k.strip() for k in raw.split(",") if k.strip()))
-    if not keys:
-        return None
-    logger.info(f"[GroqPool] {len(keys)} key(s) loaded from {multi_var}")
-    return GroqKeyPool(keys)
+# The key this service sends is no longer a Groq key: on watsonx it is an IBM Cloud API key, which
+# the IAM exchange turns into a bearer token. WATSONX_API_KEY is therefore the name to use, with
+# LLM_API_KEY for anything else; GROQ_API_KEYS is still read last so an existing deployment does
+# not break on upgrade. Whichever is set first wins, and all three accept a comma-separated list.
+KEY_VARS = ("WATSONX_API_KEY", "LLM_API_KEY", "GROQ_API_KEYS")
+
+
+def load_pool_from_env(multi_var=None):
+    """Build a key pool from WATSONX_API_KEY, LLM_API_KEY or GROQ_API_KEYS (comma-separated).
+    Returns None if none is set or none yields valid keys. Duplicate keys are silently removed."""
+    for var in ((multi_var,) if multi_var else KEY_VARS):
+        raw = os.getenv(var, "")
+        keys = list(dict.fromkeys(k.strip() for k in raw.split(",") if k.strip()))
+        if keys:
+            logger.info(f"[KeyPool] {len(keys)} key(s) loaded from {var}")
+            return GroqKeyPool(keys)
+    return None

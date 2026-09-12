@@ -39,7 +39,10 @@ _IS_GROQ_BACKEND = "groq" in (VLLM_API_BASE or "").lower()
 _key_pool = load_pool_from_env()
 if _key_pool is None or len(_key_pool) == 0:
     if _IS_GROQ_BACKEND:
-        logger.critical("[GroqPool] FATAL: GROQ_API_KEYS is not set or contains no valid keys. Set GROQ_API_KEYS=key1,key2,... and restart.")
+        logger.critical("[KeyPool] FATAL: no API key. The endpoint is Groq (VLLM_API_BASE=%s), which "
+                        "needs a key: set WATSONX_API_KEY (or LLM_API_KEY) and restart. If you meant to "
+                        "use watsonx, VLLM_API_BASE is wrong — it should point at your watsonx host.",
+                        VLLM_API_BASE)
         import sys
         sys.exit(1)
     # Local/offline backend: no keys needed. Requests still send an Authorization

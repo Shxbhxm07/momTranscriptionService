@@ -17,7 +17,7 @@ the `offline-mom-config` ConfigMap), credentials from the `offline-mom-secrets` 
 | `LLM_VERIFY_SSL` | true | `false` for a self-signed cluster certificate |
 | `LLM_CONCURRENCY` | 2 | parallel LLM calls per meeting |
 | `MODEL_CONTEXT_LIMIT` | 32768 | the model's context window |
-| `GROQ_API_KEYS` | — | only for OpenRouter/Groq testing (historical name). **Not needed for watsonx**: the service starts without it on any non-Groq backend |
+| `WATSONX_API_KEY` | — | the IBM Cloud API key, for `LLM_AUTH_MODE=iam`. Not needed on Cloud Pak for Data, which uses `CP4D_USERNAME` / `CP4D_API_KEY`. `LLM_API_KEY` and the historical `GROQ_API_KEYS` are read after it, in that order |
 
 ## Accuracy features (leave as shipped)
 `MOM_WINDOW_KEY_POINTS=true`, `MOM_MERGE_ITEMS=true`, `MOM_VERIFY_DECISIONS=false` (built, not yet
