@@ -22,11 +22,21 @@ crash mid-job re-delivers the meeting instead of losing it.
 | `tenant_id` | yes | used in the summary object path |
 | `document_ids` | yes | echoed back in the ack as `fileIds` — the correlation key |
 | `file_urls` | yes* | MinIO **object keys**, not URLs. The first path segment is the bucket unless `MINIO_INPUT_BUCKET` is set |
+| `path` | yes* | the same thing as a single string, which is what the newer backend sends. Used when `file_urls` is absent |
+| `accessVar`, `userId`, `isUser` | no | returned in the ack exactly as sent, same value and same type. Never parsed or normalised |
 | `document_names` | no | original file name; used for the audio's content type and the logs |
 | `file_fids` | — | the "already ingested" path. **Not implemented** — see below |
 
 Both spellings are accepted for every field (`tenant_id`/`tenantId`, `conversationId`/`conversation_id`,
 `file_urls`/`fileUrls`…), because the reference messages mix them.
+
+**Fields the backend sends come back untouched.** `accessVar`, `userId`, `isUser`, `path` and
+`conversationId` are copied into every acknowledgement, success or failure, with the same value and
+the same JSON type — `isUser: true` returns as a boolean, `isUser: "true"` as that string. Our own
+fields never collide with them: the minutes' location is `summaryBucketName` / `summaryObjectKey`.
+
+**Where the .docx is written** is `{tenantId}/summaries/{hash}.docx`. With no `tenant_id` the
+`conversationId` takes its place, then `userId`, so a key never begins with a slash.
 
 \* A job with no `file_urls` is acknowledged as FAILURE with
 `NotImplementedError: no file_urls — the already-ingested path is not implemented`. That is deliberate:

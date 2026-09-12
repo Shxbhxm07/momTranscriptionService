@@ -39,6 +39,10 @@ class KafkaJob:
     # Optional details for the Word minutes that no recording contains: classification, file
     # reference, address, secretary, distribution and so on (see docs/kafka-contract.md).
     mom_meta: Dict[str, Any] = field(default_factory=dict)
+    # The backend's own fields, kept EXACTLY as they arrived (same value, same type) so the ack can
+    # hand them back untouched. Never parsed, never normalised — `accessVar` in particular is an
+    # opaque credential-shaped string and `isUser` is a boolean the backend may also send as text.
+    echo: Dict[str, Any] = field(default_factory=dict)
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -50,8 +54,21 @@ class KafkaJob:
         return bool(self.file_fids or self.document_ids)
 
 
+# Sent by the backend, returned by the ack unchanged. Anything not present stays absent.
+ECHO_FIELDS = ("accessVar", "userId", "isUser", "path", "conversationId")
+
+
 def _dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _paths(msg: Dict[str, Any]) -> List[str]:
+    """The audio to fetch, from `file_urls` (reference shape) or `path` (the newer backend)."""
+    urls = list(_get(msg, "file_urls", "fileUrls", default=[]) or [])
+    if urls:
+        return urls
+    single = _get(msg, "path", default="")
+    return [single] if isinstance(single, str) and single.strip() else []
 
 
 def parse_job(msg: Dict[str, Any]) -> KafkaJob:
@@ -62,10 +79,13 @@ def parse_job(msg: Dict[str, Any]) -> KafkaJob:
         mode=_get(msg, "mode", default="") or "",
         compare_mode=_get(msg, "compare_mode", "compareMode", default="") or "",
         document_ids=list(_get(msg, "document_ids", "documentIds", default=[]) or []),
-        file_urls=list(_get(msg, "file_urls", "fileUrls", default=[]) or []),
+        # `path` is the newer backend's single audio location; file_urls is the reference shape.
+        # Either is accepted, so a message from before or after that change processes the same.
+        file_urls=_paths(msg),
         file_fids=list(_get(msg, "file_fids", "fileFids", "fIds", default=[]) or []),
         document_names=list(_get(msg, "document_names", "documentNames", default=[]) or []),
         mom_meta=_dict(_get(msg, "mom_meta", "momMeta", default={})),
+        echo={k: msg[k] for k in ECHO_FIELDS if k in msg},
         raw=msg,
     )
 
@@ -86,6 +106,10 @@ def build_ack(job: KafkaJob, *, success: bool, description: str,
     if len(desc) > _MAX_DESCRIPTION:
         desc = desc[:_MAX_DESCRIPTION - 1].rsplit(" ", 1)[0] + "…"
     ack: Dict[str, Any] = {
+        # The backend's fields first, byte for byte as they arrived — including on FAILURE, so it
+        # can match the answer to the request it sent. Our own fields never overwrite them: they
+        # have different names, and the minutes' location goes in summaryBucketName/ObjectKey.
+        **job.echo,
         "fileIds": job.document_ids,
         "tenantId": job.tenant_id,
         "compareMode": job.compare_mode,
@@ -100,5 +124,11 @@ def build_ack(job: KafkaJob, *, success: bool, description: str,
 
 
 def summary_object_key(job: KafkaJob, digest: str, ext: str = "docx") -> str:
-    """Tenant-scoped path, matching the reference: {tenantId}/summaries/{hash}.{ext}"""
-    return f"{job.tenant_id}/summaries/{digest}.{ext}"
+    """Tenant-scoped path, matching the reference: {tenantId}/summaries/{hash}.{ext}
+
+    The newer backend sends no tenant, and "" would produce a key starting with "/" — a folder
+    named nothing, at the bucket root. The conversation id takes its place, then the user id, and
+    "shared" only if a message carried none of the three.
+    """
+    scope = (job.tenant_id or job.conversation_id or job.user_id or "shared").strip("/") or "shared"
+    return f"{scope}/summaries/{digest}.{ext}"
