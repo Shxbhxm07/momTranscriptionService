@@ -9,12 +9,13 @@ means editing the env file and re-applying. No image rebuild.
 
 | | `ibm-ocp-gpu` | `ibm-ocp-to-gb10` |
 |---|---|---|
-| Where Whisper + NeMo run | pods on OCP GPUs (`components/gpu-speech`) | the GB10 (`11.0.0.34`), over the LAN |
+| Where speech runs | Whisper as a pod on an OCP GPU (`components/gpu-speech`) | the GB10 (`11.0.0.34`), over the LAN |
 | `WHISPERCPP_URL` | `http://whisper-server:8080` | `http://11.0.0.34:8080` |
 | `NEMO_URL` | `http://nemo-service:8003` | `http://11.0.0.34:8003` |
+| Diarization | **off** (`ENABLE_DIARIZATION=false`) — nemo-service is not deployed | **off**, same setting |
 | Model paths, `SPEAKER_CLEANUP` | in the env file (read by the pods) | set on the GB10, in its compose |
-| GPU on OCP | 2 GPUs (or 1 with time-slicing/MIG), ~5 GB used | none |
-| PVC for model files | `offline-mom-models`, ~3.2 GB | none |
+| GPU on OCP | 1 GPU, ~4.2 GB used (2 were needed while NeMo ran) | none |
+| PVC for model files | `offline-mom-models`, ~3.1 GB (Whisper only) | none |
 | Extra requirement | GPU operator on the nodes | firewall rule: OCP pod CIDR → 11.0.0.34 on 8080, 8003 |
 | LLM | IBM watsonx (CP4D) | IBM watsonx (CP4D) |
 

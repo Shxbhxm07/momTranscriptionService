@@ -22,7 +22,9 @@ the `offline-mom-config` ConfigMap), credentials from the `offline-mom-secrets` 
 ## Accuracy features (leave as shipped)
 `MOM_WINDOW_KEY_POINTS=true`, `MOM_MERGE_ITEMS=true`, `MOM_VERIFY_DECISIONS=false` (built, not yet
 measured on its own), `ENABLE_TRANSCRIBE_RETRY=true`, `ENABLE_TRANSCRIPT_CORRECTION=true`,
-`ENABLE_SPEAKER_NAMING=true`, `ENABLE_DIARIZATION=true`, `FILTER_HALLUCINATIONS=true`.
+`ENABLE_SPEAKER_NAMING=true`, `FILTER_HALLUCINATIONS=true`. `ENABLE_DIARIZATION` defaults to true in
+the code but the shipped env files set it to **false** — diarization is off until further notice, so
+nemo-service is not deployed and attendees come only from names said aloud.
 
 ## Kafka / MinIO / Elasticsearch (transcribe-api, mom-consumer)
 | variable | default | |

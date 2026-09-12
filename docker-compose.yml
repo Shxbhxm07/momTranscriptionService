@@ -80,13 +80,14 @@ services:
         condition: service_healthy    # don't accept uploads before the model is on the GPU
       llama-service:
         condition: service_healthy    # ... nor before the MoM writer can answer
-      nemo-service:
-        condition: service_healthy    # ... nor before the diarizer can label speakers
+      # nemo-service is deliberately NOT a dependency while diarization is off: it only starts
+      # under the "diarization" profile, and the API degrades without it anyway (an unreachable
+      # diarizer logs a warning and the minutes come out untagged).
     environment:
       - WHISPERCPP_URL=http://whisper-server:8080
       - NEMO_URL=http://nemo-service:8003
       - LLAMA_URL=http://llama-service:8001
-      - ENABLE_DIARIZATION=true
+      - ENABLE_DIARIZATION=false      # off until further notice; see nemo-service below
       # Optional quality/behaviour knobs — see config.py for what each one costs.
       - FILTER_HALLUCINATIONS=true
       - ENABLE_NOISE_REDUCTION=false
@@ -222,6 +223,9 @@ services:
       dockerfile: Dockerfile
     image: offline-mom-nemo:latest
     container_name: offline-mom-nemo
+    # Not started by default while diarization is off. To run it anyway:
+    #     docker compose --profile diarization up -d nemo-service
+    profiles: ["diarization"]
     # GPU. The shared MoM compose file pins this to CPU because its cloud target has no
     # GPU, and on CPU diarization runs ~2 HOURS per 24-minute meeting vs ~70 seconds here.
     # That difference is what makes the feature usable rather than theoretical.

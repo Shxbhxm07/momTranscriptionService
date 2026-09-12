@@ -29,14 +29,17 @@ on an x86_64 machine that can reach `nvcr.io` (see step 1b). Nothing else change
 | Deployment | image | GPU | memory request / limit | port | probe |
 |---|---|---|---|---|---|
 | whisper-server | offline-mom-whisper | 1 (uses ~4.2 GB) | 4 / 8 Gi | 8080 | TCP |
-| nemo-service | offline-mom-nemo | 1 (uses ~0.6 GB) | 6 / 10 Gi | 8003 | `/health` (`nemo_loaded`) |
+| nemo-service | offline-mom-nemo | not deployed — diarization is off (`ENABLE_DIARIZATION=false`) | | | |
 | llama-service | offline-mom-llama | — | 0.5 / 2 Gi | 8001 | `GET /` |
 | transcribe-api | offline-mom-api | — | 1 / 4 Gi | 8000 | `GET /` |
 | mom-consumer | offline-mom-api | — | 0.25 / 1 Gi | — | heartbeat file |
 
-Whisper and NeMo each request a whole GPU. They fit together on one GPU (~5 GB) if your cluster
-has GPU time-slicing or MIG enabled; otherwise give them one each. In the `ibm-ocp-to-gb10` shape they
-are not deployed on OCP at all: they run on the GB10 and OCP needs no GPU.
+Only Whisper needs a GPU, so one is enough. Diarization is off until further notice, which is why
+nemo-service is commented out of `components/gpu-speech/kustomization.yaml` and its 48 GB image and
+two model files are not needed. To bring it back, uncomment it, set `ENABLE_DIARIZATION=true`, and
+give the cluster a second GPU or enable time-slicing, since Whisper and NeMo each request a whole one.
+In the `ibm-ocp-to-gb10` shape Whisper is not deployed on OCP at all: it runs on the GB10 and OCP
+needs no GPU.
 
 ## Prerequisites — from your side
 

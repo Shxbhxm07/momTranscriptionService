@@ -1,8 +1,10 @@
-# Whisper + NeMo as pods, for a cluster with NVIDIA GPUs. Left out by the split overlay, where both
-# run on the GB10 and OCP only calls them over the LAN.
+# Speech as pods, for a cluster with NVIDIA GPUs. Left out by the split overlay, where speech runs
+# on the GB10 and OCP only calls it over the LAN. NeMo ships here but is not deployed — see below.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 resources:
   - pvc-models.yaml
   - whisper-server.yaml
-  - nemo-service.yaml
+  # NOT deployed: diarization is off (ENABLE_DIARIZATION=false in the overlay's env file), so
+  # nothing calls it. Uncomment this line and flip that setting to bring speaker labels back.
+  # - nemo-service.yaml
