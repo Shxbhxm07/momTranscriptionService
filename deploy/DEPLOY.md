@@ -19,7 +19,7 @@ on an x86_64 machine that can reach `nvcr.io` (see step 1b). Nothing else change
 |---|---|
 | `images/` | 4 container images (`docker save` tars, arm64) + `SHA256SUMS` |
 | `models/` | whisper `ggml-large-v3.bin` (3.1 GB), `ggml-silero-v6.2.0.bin`, NeMo `titanet-l.nemo`, `vad_multilingual_marblenet.nemo` + `SHA256SUMS` |
-| `deploy/openshift/` | Kustomize, the same pattern as mom-ai: `base/`, `components/gpu-speech/`, two overlays each with its `offline-mom.env`, `secrets.example.env`, `OVERLAYS.md` |
+| `deploy/openshift/` | Kustomize, the same pattern as mom-ai: `base/`, `components/speech/`, two overlays each with its `offline-mom.env`, `secrets.example.env`, `OVERLAYS.md` |
 | `source/` | full source and Dockerfiles, for building images on another architecture |
 | `scripts/` | `ibm_check.py` (tests the watsonx connection), `build-images.sh` |
 | `docs/` | `kafka-contract.md`, `configuration.md`, `ibm-watsonx.md` |
@@ -28,18 +28,24 @@ on an x86_64 machine that can reach `nvcr.io` (see step 1b). Nothing else change
 
 | Deployment | image | GPU | memory request / limit | port | probe |
 |---|---|---|---|---|---|
-| whisper-server | offline-mom-whisper | 1 (uses ~4.2 GB) | 4 / 8 Gi | 8080 | TCP |
+| whisper-server | offline-mom-whisper | none (processor build) | 4 / 8 Gi, 8 cores | 8080 | TCP |
 | nemo-service | offline-mom-nemo | not deployed — diarization is off (`ENABLE_DIARIZATION=false`) | | | |
 | llama-service | offline-mom-llama | — | 0.5 / 2 Gi | 8001 | `GET /` |
 | transcribe-api | offline-mom-api | — | 1 / 4 Gi | 8000 | `GET /` |
 | mom-consumer | offline-mom-api | — | 0.25 / 1 Gi | — | heartbeat file |
 
-Only Whisper needs a GPU, so one is enough. Diarization is off until further notice, which is why
-nemo-service is commented out of `components/gpu-speech/kustomization.yaml` and its 48 GB image and
-two model files are not needed. To bring it back, uncomment it, set `ENABLE_DIARIZATION=true`, and
-give the cluster a second GPU or enable time-slicing, since Whisper and NeMo each request a whole one.
-In the `ibm-ocp-to-gb10` shape Whisper is not deployed on OCP at all: it runs on the GB10 and OCP
-needs no GPU.
+No GPU is needed. The cluster this ships to has none, so `whisper-service/Dockerfile` builds the
+processor-only Whisper (107 MB) and the deployment asks for 8 cores instead of a GPU: about 8 minutes
+per 9-minute meeting rather than 40 seconds. On a cluster that does have GPUs, build
+`whisper-service/Dockerfile.gpu` and swap in the commented block in `whisper-server.yaml`.
+
+Diarization is off until further notice, so nemo-service is commented out of
+`components/speech/kustomization.yaml` and neither its 48 GB image nor its two model files are
+needed. Bringing it back needs `ENABLE_DIARIZATION=true` and a GPU, since NeMo has no processor
+build worth running: it takes hours per meeting.
+
+In the `ibm-ocp-to-gb10` shape Whisper is not deployed on OCP at all: it runs on the GB10's GPU and
+OCP calls it over the LAN.
 
 ## Prerequisites — from your side
 
@@ -94,7 +100,7 @@ Every setting is an environment variable in one file per shape, exactly as in mo
 
 ## Step 3 — model files onto the PVC (one time, `ibm-ocp-gpu` only)
 
-    oc apply -n offline-mom -f deploy/openshift/components/gpu-speech/pvc-models.yaml
+    oc apply -n offline-mom -f deploy/openshift/components/speech/pvc-models.yaml
     oc run model-loader -n offline-mom --image=registry.access.redhat.com/ubi9/ubi-minimal \
        --overrides='{"spec":{"volumes":[{"name":"m","persistentVolumeClaim":{"claimName":"offline-mom-models"}}],
        "containers":[{"name":"model-loader","image":"registry.access.redhat.com/ubi9/ubi-minimal",

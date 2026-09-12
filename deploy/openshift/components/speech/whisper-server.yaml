@@ -14,17 +14,26 @@ spec:
         image: offline-mom-whisper
         ports: [{containerPort: 8080}]
         envFrom: [{configMapRef: {name: offline-mom-config}}]   # WHISPER_MODEL, WHISPER_VAD_MODEL, WHISPER_THREADS
-        # Both are needed for the GPU operator to inject the node's driver into the pod;
-        # without the capabilities one the container cannot load libcuda.so.1.
+        # PROCESSOR BUILD by default (whisper-service/Dockerfile), because this cluster has no GPU.
+        # Threads are what decide the speed here: measured 7.6 min for a 9.3-minute meeting on 8,
+        # 6.5 min on 16. Give the pod at least as many cores as WHISPER_THREADS, or it will be
+        # slower than the number suggests.
         env:
-        - {name: NVIDIA_VISIBLE_DEVICES, value: all}
-        - {name: NVIDIA_DRIVER_CAPABILITIES, value: "compute,utility"}
+        - {name: WHISPER_THREADS, value: "8"}
         resources:
-          requests: {cpu: "2", memory: 4Gi}
-          limits: {memory: 8Gi, nvidia.com/gpu: 1}      # ~4.2 GB of GPU memory in use
+          requests: {cpu: "8", memory: 4Gi}
+          limits: {memory: 8Gi}
+        # ── FOR A GPU CLUSTER, build whisper-service/Dockerfile.gpu and swap the two blocks above
+        # for these: a meeting then takes 40 s instead of 8 minutes.
+        #   env:
+        #   - {name: NVIDIA_VISIBLE_DEVICES, value: all}
+        #   - {name: NVIDIA_DRIVER_CAPABILITIES, value: "compute,utility"}   # else no libcuda.so.1
+        #   resources:
+        #     requests: {cpu: "2", memory: 4Gi}
+        #     limits: {memory: 8Gi, nvidia.com/gpu: 1}     # ~4.2 GB of GPU memory in use
         volumeMounts: [{name: models, mountPath: /models, readOnly: true}]
         # whisper.cpp binds its port only after the model is on the GPU, so port-open = ready.
-        readinessProbe: {tcpSocket: {port: 8080}, initialDelaySeconds: 20, periodSeconds: 10}
+        readinessProbe: {tcpSocket: {port: 8080}, initialDelaySeconds: 60, periodSeconds: 10}
         livenessProbe: {tcpSocket: {port: 8080}, initialDelaySeconds: 120, periodSeconds: 30, failureThreshold: 5}
       volumes: [{name: models, persistentVolumeClaim: {claimName: offline-mom-models, readOnly: true}}]
 ---

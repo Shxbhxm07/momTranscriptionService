@@ -34,7 +34,9 @@ services:
   whisper-server:
     build:
       context: ./whisper-service
-      dockerfile: Dockerfile
+      # The default Dockerfile is the processor-only build, for clusters with no GPU. This machine
+      # has one, and on it a meeting takes 40 s instead of 8 minutes, so here we build the GPU one.
+      dockerfile: Dockerfile.gpu
     image: offline-mom-whisper:latest
     container_name: offline-mom-whisper
     runtime: nvidia

@@ -1,5 +1,5 @@
 # BASE — the services that need no GPU. Speech (whisper + NeMo) is added by
-# components/gpu-speech in the overlay that runs it on OCP; the split overlay points at the GB10.
+# components/speech in the overlay that runs it on OCP; the split overlay points at the GB10.
 #
 # Configuration reaches every container through ONE ConfigMap, offline-mom-config, built by the
 # overlay from its offline-mom.env. Credentials come from the offline-mom-secrets Secret, which is

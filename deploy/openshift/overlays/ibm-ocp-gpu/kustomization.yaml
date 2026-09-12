@@ -14,7 +14,7 @@ namespace: offline-mom
 resources:
   - ../../base
 components:
-  - ../../components/gpu-speech
+  - ../../components/speech
 # Build the offline-mom-config ConfigMap from the env file. Kustomize appends a content hash to the
 # name and rewrites every `configMapRef: offline-mom-config` to match, so any edit to the env file
 # triggers a rollout on its own — no image rebuild.
