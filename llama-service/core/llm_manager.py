@@ -199,9 +199,27 @@ class LLMManager:
     def load_model(self):
         """Verify API connectivity. FAILS LOUD if the configured model is unavailable —
         a wrong model id must never silently fall back to a different model."""
+        health_key = _key_pool._keys[0] if _key_pool else _OFFLINE_PLACEHOLDER_KEY  # fixed key — health checks must not consume pool rotation slots
+
+        # watsonx HAS NO /models ROUTE. Its endpoint is a single POST URL carrying a ?version=
+        # query, so "{base}/models" becomes .../text/chat?version=2023-05-29/models and the server
+        # answers 405 — which was logged as "vLLM API connection failed" on every start and looked
+        # like a broken deployment. What can be verified here is the credential: exchanging it for
+        # a token proves the key, the auth mode and the network. The model id cannot be checked,
+        # so it is taken as configured, and a wrong one surfaces on the first request instead.
+        if self._is_watsonx(self.api_base):
+            logger.info(f"Connecting to watsonx at: {self.api_base}")
+            try:
+                self._bearer(health_key)
+            except Exception as e:
+                logger.error(f"watsonx credentials could not be exchanged for a token: {e}")
+                return
+            logger.info(f"✓ watsonx ready. Authenticated; model '{self.model_id}' as configured "
+                        f"(watsonx does not list models on this endpoint).")
+            return
+
         try:
             logger.info(f"Connecting to vLLM API at: {self.api_base}")
-            health_key = _key_pool._keys[0] if _key_pool else _OFFLINE_PLACEHOLDER_KEY  # fixed key — health checks must not consume pool rotation slots
             response = self.client.get(f"{self.api_base}/models", headers={"Authorization": f"Bearer {health_key}"})
             response.raise_for_status()
             loaded_ids = [m["id"] for m in response.json().get("data", [])]
@@ -230,12 +248,20 @@ class LLMManager:
                 f"(e.g. 'openai/gpt-oss-120b' on Groq) — refusing to fall back to a wrong model."
             )
             
+    @staticmethod
+    def _is_watsonx(base: str) -> bool:
+        """watsonx endpoints are a single POST URL under /ml/v1/, with no OpenAI-style routes."""
+        return "/ml/v1/" in (base or "")
+
     def is_healthy(self):
         try:
             health_key = _key_pool._keys[0] if _key_pool else _OFFLINE_PLACEHOLDER_KEY  # fixed key — health checks must not consume pool rotation slots
+            if self._is_watsonx(self.api_base):
+                # No /models to call: a live token is the only thing that can be proven cheaply.
+                return bool(self._bearer(health_key))
             response = self.client.get(f"{self.api_base}/models", headers={"Authorization": f"Bearer {health_key}"})
             return response.status_code == 200
-        except:
+        except Exception:
             return False
 
     # ── backend shapes ────────────────────────────────────────────────────────────────────────────
