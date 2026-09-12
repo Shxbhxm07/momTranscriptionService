@@ -179,6 +179,11 @@ Document translation:
 - **NeMo's cluster clean-up (`SPEAKER_CLEANUP`) is off.** The current code can merge over-split speakers
   and drop noise clusters, but every accuracy figure was measured without it, so it ships off. Turning it
   on changes speaker counts and, through them, attendees and speaker naming — A/B it on the test meetings first.
+- **The Whisper image is ~1 GB** (2026-09-12). It builds on NVIDIA's vLLM base and runs on plain
+  Ubuntu, carrying only whisper-server and the three CUDA libraries it links against. The previous
+  19.8 GB image ran on the build base itself. Transcripts are byte-identical; a 9-minute meeting takes
+  41 s instead of 35 s, because the old image also carried a newer GPU driver that the container
+  runtime used in place of the node's.
 - **The NeMo image is 48 GB**, almost all of it NVIDIA's base. A 20 GB build on Whisper's base was made and
   tested: it fails on the GB10 (that torch build's cuDNN has no convolution engine for sm_121), so it is not
   shipped. NVIDIA's PyTorch base, with the same torch build as the NeMo image, is the route to a smaller one.

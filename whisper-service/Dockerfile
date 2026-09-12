@@ -15,17 +15,26 @@
 # Both are fixed below. Copying the prebuilt binary into an image would have preserved both,
 # which is why that shortcut was rejected — it looks like portability without being it.
 #
-# BASE IMAGE CHOICE
-# nvcr.io/nvidia/vllm:26.04-py3 is used for BOTH stages because it is already on this machine
-# (vllm-local runs from it) and already carries nvcc 13.2 plus the matching cuBLAS. So this
-# builds with no registry pull at all — which matters on a network that filters package
-# downloads — and because the runtime stage shares every layer with an image that is already
-# present, the real added disk cost is the ~4 MB of binaries, not the base's size.
+# BASE IMAGE CHOICE — TWO DIFFERENT BASES, DELIBERATELY
+# BUILD on nvcr.io/nvidia/vllm:26.04-py3: it is already on the GB10, and carries nvcc 13.2 with the
+# matching cuBLAS, so the compile needs no registry pull on a filtered network.
+# RUN on plain ubuntu:24.04. Building and running on the vLLM base produced a 19.8 GB image, 19.1 GB
+# of which is Python, PyTorch and training tooling whisper-server never loads — and it had to be
+# shipped to the customer through a pipeline that has no job for it. whisper-server is one C++
+# binary needing three CUDA libraries, which are copied from the build stage so they are exactly the
+# ones it was compiled against. Result measured 2026-09-12: 1.03 GB, byte-identical transcripts.
+# Ubuntu 24.04 is not a free choice — it is the build base's own release (glibc 2.39).
+#
+# ONE MEASURED TRADE: the vLLM base also carries a newer forward-compatibility GPU driver, which the
+# container runtime used in place of the node's. With it a 9-minute meeting took 35 s, without it
+# 41 s, same text. It is left out: 6 s on a job that takes minutes is not worth carrying 396 MB and
+# risking a node whose own driver is newer than the copy.
 #
 # THE MODEL IS NOT IN THE IMAGE. ggml-large-v3.bin is 2.9 GB and stays a mounted volume, the
 # same split already used for vLLM and Chatterbox: images carry code, volumes carry weights.
 
 ARG BASE_IMAGE=nvcr.io/nvidia/vllm:26.04-py3
+ARG RUNTIME_BASE=ubuntu:24.04
 
 # ── build stage ──────────────────────────────────────────────────────────────
 FROM ${BASE_IMAGE} AS builder
@@ -57,15 +66,28 @@ RUN cmake -B build \
     && cmake --build build --config Release -j"$(nproc)" --target whisper-server
 
 # ── runtime stage ────────────────────────────────────────────────────────────
-FROM ${BASE_IMAGE}
+FROM ${RUNTIME_BASE}
 
-# Only the server and the shared libraries it links against. Flattened into one directory so
-# the rpath games the hand build needed (mounting the repo at an identical path so its
-# baked-in rpath resolved) are gone — LD_LIBRARY_PATH below is explicit and self-contained.
-COPY --from=builder /src/build/bin/whisper-server            /opt/whisper/bin/
-COPY --from=builder /src/build/src/libwhisper.so*            /opt/whisper/lib/
-COPY --from=builder /src/build/ggml/src/libggml*.so*         /opt/whisper/lib/
-COPY --from=builder /src/build/ggml/src/ggml-cuda/libggml-cuda.so* /opt/whisper/lib/
+# libgomp is whisper.cpp's only system dependency beyond libc/libstdc++.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# cp -a inside one RUN, not COPY, for two reasons: COPY dereferences symlinks, so the old image held
+# three identical 239 MB copies of libggml-cuda.so and would hold two 607 MB copies of libcublasLt;
+# and a bind mount adds no layer. LD_LIBRARY_PATH below is explicit, so no rpath games are needed.
+# libcuda.so.1 is absent on purpose: the NVIDIA container runtime injects the node's driver.
+RUN --mount=type=bind,from=builder,source=/src/build,target=/wb \
+    --mount=type=bind,from=builder,source=/usr/local/cuda/lib64,target=/wc \
+    set -e; mkdir -p /opt/whisper/bin /opt/whisper/lib /usr/local/cuda/lib64; \
+    cp -a /wb/bin/whisper-server /opt/whisper/bin/; \
+    cp -a /wb/src/libwhisper.so* /opt/whisper/lib/; \
+    cp -a /wb/ggml/src/libggml*.so* /opt/whisper/lib/; \
+    cp -a /wb/ggml/src/ggml-cuda/libggml-cuda.so* /opt/whisper/lib/; \
+    cp -a /wc/libcudart.so.13* /wc/libcublas.so.13* /wc/libcublasLt.so.13* /usr/local/cuda/lib64/; \
+    MISSING=$(LD_LIBRARY_PATH=/opt/whisper/lib:/usr/local/cuda/lib64 ldd /opt/whisper/bin/whisper-server \
+        | grep -i "not found" | grep -v "libcuda.so.1" || true); \
+    [ -z "$MISSING" ] || { echo "whisper-server is missing libraries on this base: $MISSING"; exit 1; }; \
+    echo "whisper-server links cleanly (libcuda.so.1 comes from the node's driver at runtime)"
 
 ENV LD_LIBRARY_PATH=/opt/whisper/lib:/usr/local/cuda/lib64
 ENV PATH=/opt/whisper/bin:$PATH
