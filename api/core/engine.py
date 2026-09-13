@@ -132,7 +132,8 @@ class TranscriptionEngine:
             return ""
 
     # ── transcription ────────────────────────────────────────────────────────
-    def transcribe_to_english(self, audio_path: str, translate: bool = True) -> Dict[str, Any]:
+    def transcribe_to_english(self, audio_path: str, translate: bool = True,
+                              language: str = None) -> Dict[str, Any]:
         """Decode `audio_path` (16 kHz mono WAV) to English text.
 
         `translate=False` selects Whisper's <|transcribe|> task, which is correct ONLY when
@@ -178,6 +179,13 @@ class TranscriptionEngine:
         # but belongs to a configuration we do not use, and matters only if BEAM_SIZE is lowered.
         if MAX_CONTEXT is not None:
             data["max_context"] = str(MAX_CONTEXT)
+        # Pinned only when the caller KNOWS the language. The minutes path never pins it: forcing
+        # "hi" on English speech transliterated it into Devanagari (see the translate flag above).
+        # Translation pins it for the opposite reason — Whisper's own language id often calls Hindi
+        # speech Urdu, and an unpinned transcribe task then writes Urdu script, which the Hindi
+        # translator cannot read. The probe has already decided; this makes the decode honour it.
+        if language:
+            data["language"] = language
 
         # NOTE: no `prompt` / initial_prompt is sent, and that is deliberate. The MoM
         # service's HINGLISH_PROMPT existed to make whisper PRESERVE code-switching

@@ -75,3 +75,12 @@ nothing from their search.
 | `CHUNK_OVERLAP_WORDS` | 30 | so a sentence across a boundary is whole in one chunk |
 | `MIN_CHUNK_WORDS` | 15 | below this a chunk is a heading, not material |
 | `MAX_CHUNK_CHARS` | 1200 | backstop for text short on words but long on tokens |
+
+## Translation of audio and video
+
+| variable | where | value | |
+|---|---|---|---|
+| `JOB_KIND` | consumer | `mom` | `translate` makes this consumer a translation consumer: same image, own topics |
+| `TRANSLATE_API_URL` | consumer | `http://transcribe-api:8000/translate-media` | where a translation consumer sends the audio |
+| `MAX_MEDIA_MB` | transcribe-api | 4096 | largest audio or video `/translate-media` accepts. The upload is streamed to disk, so this caps disk, not memory |
+

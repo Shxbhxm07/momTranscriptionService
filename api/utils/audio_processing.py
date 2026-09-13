@@ -95,3 +95,31 @@ def normalize_audio(audio_bytes: bytes, denoise: bool = False) -> bytes:
                 os.unlink(path)
             except OSError:
                 pass
+
+
+def media_file_to_wav(src_path: str, denoise: bool = False) -> str:
+    """Any ffmpeg-readable audio OR VIDEO file on disk → a temp 16 kHz mono WAV path.
+
+    The path-based sibling of normalize_audio. That one takes bytes, which is fine for a meeting
+    recording and wrong for video: an hour of 1080p is gigabytes, and holding it in memory per
+    request is how a pod gets OOM-killed. Here the upload stays on disk and ffmpeg reads it from
+    there, keeping only the audio track (-vn), which for the same hour is tens of megabytes.
+
+    The caller owns the returned file and must delete it. Raises RuntimeError when ffmpeg finds no
+    audio to decode — a silent video, or not media at all — rather than handing Whisper nothing.
+    """
+    out = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    out.close()
+    command = ["ffmpeg", "-y", "-loglevel", "error", "-i", src_path, "-vn"]
+    if denoise:
+        command += ["-af", _DENOISE_CHAIN]
+    command += ["-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", out.name]
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0 or os.path.getsize(out.name) <= 44:     # 44 bytes = a WAV header alone
+        try:
+            os.unlink(out.name)
+        except OSError:
+            pass
+        detail = (result.stderr or "").strip().splitlines()[-1:] or ["no audio stream"]
+        raise RuntimeError(f"Could not read any audio from this file: {detail[0][:200]}")
+    return out.name

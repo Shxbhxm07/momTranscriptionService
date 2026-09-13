@@ -132,7 +132,7 @@ def build_ack(job: KafkaJob, *, success: bool, description: str,
     return ack
 
 
-def summary_object_key(job: KafkaJob, digest: str, ext: str = "docx") -> str:
+def summary_object_key(job: KafkaJob, digest: str, ext: str = "docx", folder: str = "summaries") -> str:
     """Tenant-scoped path, matching the reference: {tenantId}/summaries/{hash}.{ext}
 
     The newer backend sends no tenant, and "" would produce a key starting with "/" — a folder
@@ -140,4 +140,4 @@ def summary_object_key(job: KafkaJob, digest: str, ext: str = "docx") -> str:
     "shared" only if a message carried none of the three.
     """
     scope = (job.tenant_id or job.conversation_id or job.user_id or "shared").strip("/") or "shared"
-    return f"{scope}/summaries/{digest}.{ext}"
+    return f"{scope}/{folder}/{digest}.{ext}"

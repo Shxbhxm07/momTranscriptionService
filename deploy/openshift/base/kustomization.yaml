@@ -10,4 +10,5 @@ resources:
   - transcribe-api.yaml
   - llama-service.yaml
   - mom-consumer.yaml
+  - translate-consumer.yaml
   - route.yaml

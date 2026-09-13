@@ -108,6 +108,10 @@ TRANSCRIBE_RETRY_LOST_S = float(os.getenv("TRANSCRIBE_RETRY_LOST_S", "45"))
 TRANSCRIBE_RETRY_LOST_FRACTION = float(os.getenv("TRANSCRIBE_RETRY_LOST_FRACTION", "0.02"))
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "500"))
+# Video is far bigger than the speech inside it: an hour of 1080p is gigabytes, its audio track tens
+# of megabytes. /translate-media streams the upload to disk and lets ffmpeg read it from there, so
+# this caps disk use, not memory — which is why it can sit well above MAX_UPLOAD_MB.
+MAX_MEDIA_MB = int(os.getenv("MAX_MEDIA_MB", "4096"))
 
 # ── document translation (Hindi ⇄ English) ───────────────────────────────────
 # Reuses llama-service's /translate_batch — the same vLLM, no second model. See
@@ -244,3 +248,9 @@ KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "mom-consumer")
 # twice, visible only on the bill.
 KAFKA_MAX_POLL_INTERVAL_MS = int(os.getenv("KAFKA_MAX_POLL_INTERVAL_MS", str(20 * 60 * 1000)))
 MOM_API_URL = os.getenv("MOM_API_URL", "http://transcribe-api:8000/transcribe-and-generate-mom")
+TRANSLATE_API_URL = os.getenv("TRANSLATE_API_URL", "http://transcribe-api:8000/translate-media")
+
+# ONE IMAGE, TWO CONSUMERS. "mom" turns a recording into minutes; "translate" turns an audio or video
+# file into translated text. They are deployed separately, each with its own topics, so a long video
+# translation never sits in front of a meeting (the consumer handles one job at a time by design).
+JOB_KIND = os.getenv("JOB_KIND", "mom").strip().lower()

@@ -711,3 +711,46 @@ def _build(mom: Dict[str, Any], meta: Dict[str, Any], pages: int = 0) -> Tuple[b
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue(), pages
+
+
+# ── translation output ────────────────────────────────────────────────────────────────────────────
+# Not the JSSD layout: that governs minutes of a meeting, and a translated recording is not minutes.
+# A plain document instead, in the same Arial and spacing so the two outputs look like one product:
+# the translation first, because that is what was asked for, then the original transcript under it
+# so a reader can check any line against what was actually said.
+
+def build_translation_docx(result: Dict[str, Any], file_name: str = "") -> bytes:
+    """/translate-media response → .docx bytes: title, languages, translation, original transcript."""
+    doc = docx.Document()
+    _page_setup(doc, draft=False)
+
+    source = result.get("source_lang") or ""
+    target = result.get("target_lang") or ""
+    title = f"TRANSLATION OF {file_name.upper()}" if file_name else "TRANSLATION"
+    _centre(doc.add_paragraph(), title, keep=True)
+    _blank(doc)
+    meta = f"{source} to {target}"
+    if result.get("duration_s"):
+        minutes, seconds = divmod(int(result["duration_s"]), 60)
+        meta += f", {minutes} min {seconds:02d} s of audio"
+    _centre(doc.add_paragraph(), meta, bold=False)
+
+    for heading, text in ((f"TRANSLATION ({target.upper()})", result.get("translated_text", "")),
+                          (f"ORIGINAL TRANSCRIPT ({source.upper()})", result.get("original_text", ""))):
+        _blank(doc, keep=True)
+        _centre(doc.add_paragraph(), heading, keep=True)
+        for block in [b.strip() for b in (text or "").split("\n\n") if b.strip()]:
+            _blank(doc)
+            _fmt(doc.add_paragraph()).add_run(block)
+
+    notes = result.get("notes") or []
+    if notes:
+        _blank(doc, keep=True)
+        _centre(doc.add_paragraph(), "NOTES", keep=True)
+        for note in notes:
+            _blank(doc)
+            _fmt(doc.add_paragraph()).add_run(str(note))
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()

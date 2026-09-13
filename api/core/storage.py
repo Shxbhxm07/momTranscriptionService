@@ -10,6 +10,7 @@ it unset, the FIRST SEGMENT is read as the bucket. Getting this backwards produc
 NoSuchKey rather than an obvious error, so it is a setting rather than a guess baked into code.
 """
 import io
+import os
 import logging
 from typing import Tuple
 
@@ -64,6 +65,19 @@ class ObjectStore:
                 resp.close(); resp.release_conn()
         logger.info(f"[MINIO] ↓ {bucket}/{key} ({len(data)} bytes)")
         return data
+
+    def download_to_file(self, object_path: str, dest_path: str) -> int:
+        """Stream one object to a local file and return its size — for video, which can be gigabytes.
+
+        download() returns bytes, which is right for a meeting recording and wrong for a video: the
+        whole file would sit in the consumer's memory and then be copied again into the request body.
+        This writes it to disk in chunks and hands back only the size.
+        """
+        bucket, key = split_object_path(object_path)
+        if not bucket or not key:
+            raise ValueError(f"cannot resolve bucket/key from {object_path!r}")
+        self.client.fget_object(bucket, key, dest_path)
+        return os.path.getsize(dest_path)
 
     def upload(self, key: str, data: bytes, content_type: str, bucket: str = "") -> Tuple[str, str]:
         """Store bytes and return (bucket, key) for the acknowledgement."""

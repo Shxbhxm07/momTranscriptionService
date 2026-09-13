@@ -23,6 +23,7 @@ as it needs, and a dead process is still noticed within the session timeout. The
 stays idempotent on a stable document id, so a genuine redelivery overwrites instead of duplicating.
 """
 import hashlib
+import tempfile
 import json
 import logging
 import os
@@ -37,12 +38,14 @@ from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import CommitFailedError
 
 sys.path.insert(0, "/app")
-from config import (KAFKA_ACK_TOPIC, KAFKA_BOOTSTRAP, KAFKA_GROUP_ID,  # noqa: E402
-                    KAFKA_JOB_TOPIC, KAFKA_MAX_POLL_INTERVAL_MS, MOM_API_URL, MOM_TIMEOUT)
+from config import (JOB_KIND, KAFKA_ACK_TOPIC, KAFKA_BOOTSTRAP, KAFKA_GROUP_ID,  # noqa: E402
+                    KAFKA_JOB_TOPIC, KAFKA_MAX_POLL_INTERVAL_MS, MOM_API_URL, MOM_TIMEOUT,
+                    TRANSLATE_API_URL)
 from core.kafka_contract import build_ack, parse_job, summary_object_key  # noqa: E402
 from core.search_index import ChunkIndex, MomIndex  # noqa: E402
 from core.storage import ObjectStore  # noqa: E402
-from utils.docx_export import build_mom_docx  # noqa: E402
+from utils.audio_processing import media_file_to_wav  # noqa: E402
+from utils.docx_export import build_mom_docx, build_translation_docx  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("consumer")
@@ -109,12 +112,69 @@ def process(job, store: ObjectStore, index: MomIndex, chunks: ChunkIndex) -> dic
         return build_ack(job, success=False, description=f"{type(e).__name__}: {e}")
 
 
+def process_translation(job, store: ObjectStore) -> dict:
+    """One translation job → an acknowledgement. Never raises: a crash here would lose the ack.
+
+    The media is streamed from MinIO to disk and reduced to its audio track HERE, before it is sent:
+    requests builds a multipart body in memory, so posting a 2 GB video would hold 2 GB, while the
+    same hour of 16 kHz mono speech is about 115 MB. The API converts again, which on a WAV is cheap.
+    """
+    t0 = time.time()
+    media = wav = None
+    try:
+        if not job.file_urls:
+            raise NotImplementedError("no file_urls or path — nothing to translate")
+        name = job.document_names[0] if job.document_names else job.file_urls[0].rsplit("/", 1)[-1]
+        fd, media = tempfile.mkstemp(suffix=os.path.splitext(name)[1] or ".bin")
+        os.close(fd)
+        size = store.download_to_file(job.file_urls[0], media)
+        logger.info(f"[JOB {job.conversation_id}] downloaded {name} ({size/1048576:.1f} MB)")
+
+        wav = media_file_to_wav(media)
+        os.unlink(media)
+        media = None
+        with open(wav, "rb") as fh:
+            r = requests.post(TRANSLATE_API_URL, files={"file": (os.path.splitext(name)[0] + ".wav", fh, "audio/wav")},
+                              timeout=MOM_TIMEOUT)
+        if r.status_code != 200:
+            detail = r.json().get("detail") if r.headers.get("content-type", "").startswith("application/json") else r.text
+            raise RuntimeError(f"translate-media answered {r.status_code}: {str(detail)[:300]}")
+        result = r.json()
+
+        docx_bytes = build_translation_docx(result, name)
+        bucket, key = store.upload(
+            summary_object_key(job, hashlib.md5(docx_bytes).hexdigest(), folder="translations"),
+            docx_bytes, DOCX_MIME)
+        logger.info(f"[JOB {job.conversation_id}] {result.get('source_lang')} → {result.get('target_lang')} "
+                    f"done in {time.time()-t0:.0f}s — {bucket}/{key}")
+        return build_ack(job, success=True, bucket=bucket, object_key=key,
+                         description=(result.get("translated_text") or "")[:300])
+    except Exception as e:
+        logger.error(f"[JOB {job.conversation_id}] failed after {time.time()-t0:.0f}s: {e}")
+        return build_ack(job, success=False, description=f"{type(e).__name__}: {e}")
+    finally:
+        for path in (media, wav):
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+
+
 def main():
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
 
-    store, index, chunks = ObjectStore(), MomIndex(), ChunkIndex()
-    index.ensure_indices()
+    if JOB_KIND not in ("mom", "translate"):
+        raise SystemExit(f"JOB_KIND must be 'mom' or 'translate', not {JOB_KIND!r}")
+    store = ObjectStore()
+    if JOB_KIND == "mom":
+        index, chunks = MomIndex(), ChunkIndex()
+        index.ensure_indices()
+        handle = lambda job: process(job, store, index, chunks)  # noqa: E731
+    else:
+        # Translations are stored and acknowledged, not indexed: nothing asked for them to be searchable.
+        handle = lambda job: process_translation(job, store)     # noqa: E731
     consumer = KafkaConsumer(
         KAFKA_JOB_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP.split(","),
@@ -129,7 +189,7 @@ def main():
     )
     producer = KafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP.split(","),
                              value_serializer=lambda v: json.dumps(v).encode())
-    logger.info(f"listening on {KAFKA_JOB_TOPIC!r} → acking to {KAFKA_ACK_TOPIC!r} "
+    logger.info(f"[{JOB_KIND}] listening on {KAFKA_JOB_TOPIC!r} → acking to {KAFKA_ACK_TOPIC!r} "
                 f"(group={KAFKA_GROUP_ID}, poll interval {KAFKA_MAX_POLL_INTERVAL_MS/60000:.0f}m)")
 
     worker = ThreadPoolExecutor(max_workers=1)
@@ -147,7 +207,7 @@ def main():
                     continue
                 logger.info(f"[JOB {job.conversation_id}] received at offset {rec.offset}")
                 consumer.pause(tp)
-                pending = worker.submit(process, job, store, index, chunks)
+                pending = worker.submit(handle, job)
                 while not pending.done():
                     _beat()
                     consumer.poll(timeout_ms=1000)   # paused → no records, but keeps the membership alive

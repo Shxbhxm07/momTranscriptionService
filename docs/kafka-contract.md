@@ -135,3 +135,27 @@ Failure — `summaryBucketName`/`summaryObjectKey` are **omitted**, never sent e
 About 5-20 minutes per meeting depending on length and LLM latency (measured: 9-minute audio ≈ 4-7
 min, 29-minute audio ≈ 13-22 min). A job longer than `KAFKA_MAX_POLL_INTERVAL_MS` is safe — the
 consumer keeps polling a paused partition while it works, so Kafka does not eject it mid-job.
+
+## Translation jobs (topic `translate.jobs`, acks on `translate.acks`)
+
+Audio or video in, translated text out: **Hindi speech becomes English, English speech becomes
+Hindi**, with the spoken language detected. Anything else is refused with a FAILURE ack saying so.
+
+A second consumer runs the same image with `JOB_KIND=translate` and its own topics, so a long video
+never waits behind a meeting — each consumer handles one job at a time by design.
+
+The job message and the acknowledgement are **exactly the minutes contract above**: the same fields
+in, the same five backend fields echoed back, `path` filled with where the result was stored. Only
+three things differ:
+
+| | minutes | translation |
+|---|---|---|
+| input | audio | audio **or video** (mp4, webm, mkv, mov, m4a…): only the sound is used |
+| stored at | `<bucket>/<tenant>/summaries/<hash>.docx` | `<bucket>/<tenant>/translations/<hash>.docx` |
+| `description` | first 300 characters of the summary | first 300 characters of the translation |
+
+The .docx holds the translation first, then the original transcript under it, so any line can be
+checked against what was said. Translations are not written to Elasticsearch.
+
+**Timing.** Transcription runs at the speed of the Whisper deployment (on a processor, roughly 0.8x
+real time), then translation. Measured on the GB10: a 75-second English video in 85 s end to end.

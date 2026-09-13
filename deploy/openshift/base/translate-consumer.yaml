@@ -1,0 +1,43 @@
+# Kafka worker for TRANSLATION: audio or video in → transcript in the spoken language → the other
+# language (Hindi ⇄ English) → .docx to MinIO → ack. Same image and code as mom-consumer, run in
+# translate mode with its own topics, so a long video never waits behind a meeting.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: translate-consumer
+  labels: {app: translate-consumer}
+spec:
+  replicas: 1                      # one job at a time, like mom-consumer
+  strategy: {type: Recreate}       # never two consumers in one group during a rollout
+  selector: {matchLabels: {app: translate-consumer}}
+  template:
+    metadata: {labels: {app: translate-consumer}}
+    spec:
+      terminationGracePeriodSeconds: 3600   # SIGTERM finishes the file in hand before exiting
+      containers:
+      - name: consumer
+        image: offline-mom-api
+        command: ["python", "/app/consumer.py"]
+        envFrom:
+        - configMapRef: {name: offline-mom-config}
+        - secretRef: {name: offline-mom-secrets}
+        # These override the shared ConfigMap, which carries the MINUTES topics and group.
+        env:
+        - {name: JOB_KIND, value: translate}
+        - {name: KAFKA_JOB_TOPIC, value: translate.jobs}
+        - {name: KAFKA_ACK_TOPIC, value: translate.acks}
+        - {name: KAFKA_GROUP_ID, value: offline-mom-translate}
+        - {name: TRANSLATE_API_URL, value: "http://transcribe-api:8000/translate-media"}
+        resources:
+          # More than mom-consumer: this one runs ffmpeg to pull the sound out of a video before
+          # sending it, so the upload to transcribe-api is the audio track, not the whole file.
+          requests: {cpu: 500m, memory: 512Mi}
+          limits: {memory: 2Gi}
+        volumeMounts: [{name: scratch, mountPath: /tmp}]
+        livenessProbe:
+          exec: {command: ["sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/consumer-alive) )) -lt 120"]}
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 3
+      # A downloaded video lives here until its audio is extracted: room for a large one.
+      volumes: [{name: scratch, emptyDir: {sizeLimit: 10Gi}}]

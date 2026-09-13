@@ -1,10 +1,12 @@
-"""Two offline endpoints over the same local models.
+"""Three offline endpoints over the same local models.
 
     POST /transcribe-and-generate-mom   audio=<file>  → {"success": true, "mom": {...}}
     POST /translate-document            file=<file>   → {"success": true, "translated_text": ...}
+    POST /translate-media               file=<file>   → {"success": true, "translated_text": ..., "original_text": ...}
 
 The first turns Hindi/English/Hinglish meeting audio into English Minutes of Meeting; the
-second translates PDF / DOCX / DOC / TXT documents between Hindi and English. They share
+second translates PDF / DOCX / DOC / TXT documents between Hindi and English; the third
+transcribes an audio or video file in the language spoken and translates it into the other. They share
 llama-service and the vLLM behind it, and nothing else — see core/translate_doc.py.
 
 THEIR CONTRACTS ARE OPPOSITE, DELIBERATELY. The MoM endpoint never returns its input text;
@@ -54,6 +56,7 @@ from config import (
     FILTER_HALLUCINATIONS,
     LLAMA_URL,
     MAX_DOC_MB,
+    MAX_MEDIA_MB,
     MAX_UPLOAD_MB,
     MIN_TRANSCRIPT_CHARS,
     NEMO_URL,
@@ -74,7 +77,7 @@ from core.translate_doc import (
     detect_language,
     normalize_lang,
 )
-from utils.audio_processing import normalize_audio
+from utils.audio_processing import media_file_to_wav, normalize_audio
 from utils.documents import SUPPORTED_EXTENSIONS, DocumentError, extract_text_blocks
 from utils.formatting import label_transcript, apply_speaker_names, speech_in_gaps
 
@@ -453,6 +456,164 @@ def _resolve_languages(text: str, source_lang: Optional[str], target_lang: Optio
     if target is None:
         target = "English" if source == "Hindi" else "Hindi"
     return source, target, detected
+
+
+# ── /translate-media ──────────────────────────────────────────────────────────────────────────────
+# Audio or video in, translated text out: Hindi speech becomes English, English speech becomes Hindi.
+#
+# ONE ROUTE FOR BOTH DIRECTIONS: Whisper transcribes in the language that was SPOKEN, then the same
+# document translator turns that text into the other language. Whisper's own translate task was the
+# tempting shortcut for Hindi → English, but it only ever translates INTO English and never returns
+# the original words, and the caller wants both.
+from core.translate_doc import TranslationError, detect_language, normalize_lang  # noqa: E402
+
+# Whisper's language id regularly labels Hindi speech as Urdu, and an unpinned transcribe task then
+# writes URDU SCRIPT — which the Hindi translator's script checks cannot read. Both are Hindi here.
+_PROBE_TO_LANG = {"hi": "Hindi", "ur": "Hindi", "en": "English"}
+_WHISPER_CODE = {"Hindi": "hi", "English": "en"}
+
+
+def _mostly_other_script(text: str) -> bool:
+    """True when most letters are neither Devanagari nor Latin — speech we cannot translate.
+
+    detect_language() only weighs Devanagari against Latin, so an Urdu or Tamil transcript, with
+    neither, would fall through to "English" and be sent to the model as English. This catches it.
+    """
+    letters = [ch for ch in text if ch.isalpha()]
+    if not letters:
+        return False
+    known = sum(1 for ch in letters if "\u0900" <= ch <= "\u097f" or (ch.isascii()))
+    return known / len(letters) < 0.5
+
+
+def _transcript_blocks(segments, limit: int = 600):
+    """Consecutive Whisper segments joined into paragraph-sized blocks.
+
+    A segment is a few seconds of speech, often half a sentence. Translated one by one, each loses
+    the context that decides its meaning; joined into ~600-character paragraphs the model sees whole
+    thoughts, and the original and the translation stay paragraph-for-paragraph comparable.
+    """
+    blocks, current = [], ""
+    for seg in segments or []:
+        text = (seg.get("text") or "").strip()
+        if not text:
+            continue
+        if current and len(current) + 1 + len(text) > limit:
+            blocks.append(current)
+            current = text
+        else:
+            current = f"{current} {text}".strip()
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+@app.post("/translate-media")
+def translate_media(
+    file: UploadFile = File(...),
+    source_lang: Optional[str] = Form(None),
+    target_lang: Optional[str] = Form(None),
+):
+    """Audio or video → transcript in the spoken language → the other language. Hindi ⇄ English.
+
+    Both language fields are optional: the spoken language is detected, and the target is the other
+    one. SYNC on purpose, like every handler here — each step blocks for minutes.
+    """
+    import shutil
+
+    if not engine.is_ready():
+        raise HTTPException(status_code=503, detail=f"Local whisper server not reachable at {WHISPERCPP_URL}")
+    if not translator.is_ready():
+        raise HTTPException(status_code=503, detail=f"Local translation service not reachable at {LLAMA_URL}")
+    try:
+        requested_source = normalize_lang(source_lang, "source_lang")
+        requested_target = normalize_lang(target_lang, "target_lang")
+    except TranslationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    filename = file.filename or "media"
+    upload_path = wav_path = None
+    try:
+        # To disk, never into memory: a video can be gigabytes. Starlette has already spooled large
+        # uploads to a temp file; this copies it in 1 MB pieces rather than reading it whole.
+        suffix = os.path.splitext(filename)[1] or ".bin"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(file.file, tmp, length=1024 * 1024)
+            upload_path = tmp.name
+        size_mb = os.path.getsize(upload_path) / (1024 * 1024)
+        if size_mb == 0:
+            raise HTTPException(status_code=400, detail="Empty file")
+        if size_mb > MAX_MEDIA_MB:
+            raise HTTPException(status_code=413, detail=f"File is {size_mb:.0f}MB, limit is {MAX_MEDIA_MB}MB")
+        logger.info(f"[MEDIA] {filename} ({size_mb:.1f}MB)")
+
+        try:
+            wav_path = media_file_to_wav(upload_path, denoise=ENABLE_NOISE_REDUCTION)
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        os.unlink(upload_path)          # a large video's disk is freed as soon as its audio is out
+        upload_path = None
+
+        # 1. Which language was spoken. A caller who knows can say; otherwise Whisper probes.
+        source, probe = requested_source, ""
+        if source is None and ENABLE_LANG_DETECT:
+            probe = engine.detect_language(wav_path)
+            source = _PROBE_TO_LANG.get(probe)
+            if probe and source is None:
+                raise HTTPException(status_code=422, detail=(
+                    f"The speech was detected as {probe!r}. Only Hindi and English are supported."))
+
+        # 2. Transcribe IN that language — pinned, so Hindi comes back in Devanagari, not Urdu script.
+        result = engine.transcribe_to_english(wav_path, translate=False, language=_WHISPER_CODE.get(source))
+        result = engine.clean(result, FILTER_HALLUCINATIONS)
+        blocks = _transcript_blocks(result.get("segments")) or [result["text"].strip()]
+        original = "\n\n".join(b for b in blocks if b)
+        if not original.strip():
+            raise HTTPException(status_code=422, detail="No speech could be transcribed from this file.")
+
+        # 3. An unsure probe leaves the language to the transcript's own script.
+        detected = requested_source is None
+        if source is None:
+            if _mostly_other_script(original):
+                raise HTTPException(status_code=422, detail=(
+                    "The speech is in neither Hindi nor English. Only Hindi and English are supported."))
+            source = detect_language(original)
+        target = requested_target or ("English" if source == "Hindi" else "Hindi")
+
+        # 4. Translate, with the same script checks, retries and honest reporting as documents.
+        try:
+            translated = translator.translate_blocks(blocks, source, target)
+        except TranslationError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+
+        notes = []
+        if detected:
+            notes.append(f"The spoken language was detected as {source}.")
+        if translated.untranslated:
+            notes.append(
+                f"{translated.untranslated} of {translated.chunks} passage(s) could not be translated and "
+                f"are given in {source} ({', '.join(f'{k}: {v}' for k, v in sorted(translated.failure_reasons.items()))}).")
+        logger.info(f"[MEDIA] ✓ {filename}: {source} → {target}, {result.get('duration', 0):.0f}s of audio, "
+                    f"{translated.translated}/{translated.chunks} passages, {translated.untranslated} untranslated")
+        return {
+            "success": True,
+            "source_lang": source,
+            "target_lang": target,
+            "language_detected": detected,
+            "duration_s": result.get("duration"),
+            "original_text": original,
+            "translated_text": translated.text,
+            "notes": notes,
+            "stats": {"passages": translated.chunks, "translated": translated.translated,
+                      "untranslated": translated.untranslated, "model_calls": translated.model_calls},
+        }
+    finally:
+        for path in (upload_path, wav_path):
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 
 
 @app.post("/translate-document")
