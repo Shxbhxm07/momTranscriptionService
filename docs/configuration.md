@@ -56,3 +56,22 @@ nemo-service is not deployed and attendees come only from names said aloud.
 
 ## Document translation (transcribe-api)
 `ENABLE_OCR=true`, `OCR_LANGS=hin+eng`, `MAX_DOC_MB=50`. Formats: PDF (text or scanned), DOCX, DOC, TXT.
+
+## The searchable copy (transcribe-api / mom-consumer)
+
+Their platform's search reads an index of CHUNKS with embeddings, written by their own ingestion
+service. Our per-meeting document cannot be found by it, so the minutes are written there too —
+one document per chunk, in their exact shape (`fId`, `text`, `pageNo`, `para`, `fileName`,
+`username`, `path`, `in_trash`), with ids built from the conversation id so a re-run replaces
+rather than doubles. The index is never created here: theirs carries the synonym analyser, the
+vector mapping and the embedding pipeline, and one created by us would accept writes and return
+nothing from their search.
+
+| variable | value | |
+|---|---|---|
+| `ENABLE_CHUNK_INDEX` | false | off until the index name is known |
+| `CHUNK_INDEX` | — | the index their search reads, e.g. `teamsync_v1` |
+| `CHUNK_WORDS` | 120 | mirrors their doc_ingest; above this the embedding model truncates silently |
+| `CHUNK_OVERLAP_WORDS` | 30 | so a sentence across a boundary is whole in one chunk |
+| `MIN_CHUNK_WORDS` | 15 | below this a chunk is a heading, not material |
+| `MAX_CHUNK_CHARS` | 1200 | backstop for text short on words but long on tokens |

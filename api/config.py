@@ -216,6 +216,23 @@ ELASTIC_INDEX_ATTACHED = os.getenv("ELASTIC_INDEX_ATTACHED", "mom-attached")
 ELASTIC_INDEX_INGESTED = os.getenv("ELASTIC_INDEX_INGESTED", "mom-ingested")
 ELASTIC_CREATE_INDICES = os.getenv("ELASTIC_CREATE_INDICES", "true").lower() == "true"
 
+# ── the searchable copy, in the shape their platform already uses ─────────────
+# Their doc-ingest service writes one document PER CHUNK into an index whose default_pipeline fills
+# in the embedding, and their search reads that shape. Our own index holds one document per meeting
+# with the fields as data, which their search cannot see and which a chunk index cannot answer
+# ("every open action item for Rahul"). Both are written, for the two different jobs.
+#
+# Off until the index name is set, because writing into the wrong index with the wrong shape is
+# worse than not writing at all. The chunking numbers mirror doc_ingest.py exactly: a chunk that
+# tokenises past the embedding model's limit is truncated silently, and 120 words was what measured
+# clean there.
+ENABLE_CHUNK_INDEX = os.getenv("ENABLE_CHUNK_INDEX", "false").lower() == "true"
+CHUNK_INDEX = os.getenv("CHUNK_INDEX", "").strip()
+CHUNK_WORDS = int(os.getenv("CHUNK_WORDS", "120"))
+CHUNK_OVERLAP_WORDS = int(os.getenv("CHUNK_OVERLAP_WORDS", "30"))
+MIN_CHUNK_WORDS = int(os.getenv("MIN_CHUNK_WORDS", "15"))
+MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "1200"))
+
 
 # ── Kafka ingestion ──────────────────────────────────────────────────────────
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")

@@ -12,12 +12,13 @@ mapping would make every string a text+keyword pair and silently turn `decisions
 field nobody can aggregate on.
 """
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from elasticsearch import Elasticsearch
 
-from config import (ELASTIC_CREATE_INDICES, ELASTIC_INDEX_ATTACHED,
-                    ELASTIC_INDEX_INGESTED, ELASTIC_PASSWORD, ELASTIC_URL, ELASTIC_USER)
+from config import (CHUNK_INDEX, CHUNK_OVERLAP_WORDS, CHUNK_WORDS, ELASTIC_CREATE_INDICES,
+                    ELASTIC_INDEX_ATTACHED, ELASTIC_INDEX_INGESTED, ELASTIC_PASSWORD, ELASTIC_URL,
+                    ELASTIC_USER, ENABLE_CHUNK_INDEX, MAX_CHUNK_CHARS, MIN_CHUNK_WORDS)
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +104,149 @@ class MomIndex:
         self.client.index(index=index, id=doc_id, document=body, refresh=True)
         logger.info(f"[ELASTIC] indexed {index}/{doc_id} ({source})")
         return index, doc_id
+
+
+# ── the searchable copy, in their doc-ingest shape ───────────────────────────────────────────────
+# Their ingestion service (doc_ingest.py, kept out of this repo) writes one document per chunk:
+#
+#     {fId, text, pageNo, para, fileName, username, path, in_trash}
+#
+# with the embedding filled in by the index's default_pipeline, and ids built from
+# (fId, pageNo, para) so a re-run overwrites rather than doubles. Minutes written the same way are
+# found by the search their product already has; the per-meeting document above is what answers
+# "list the open action items", which a chunk index cannot.
+#
+# The MINUTES are chunked, never the transcript — we do not store transcripts, and the minutes are
+# what is worth finding. Each section becomes a "page", so a hit can cite Decisions or Action Items
+# rather than an offset, and the chunk ids stay stable when an unrelated section changes.
+
+def _chunk(text: str) -> List[str]:
+    """One section's text as overlapping word windows — the rules doc_ingest.py measured.
+
+    Words, not characters, because a character window cuts a word in half and the fragment is noise
+    in both the embedding and the keyword index. The character budget is the backstop for text that
+    is short on words but long on tokens, like a table row or a run of identifiers.
+    """
+    size, overlap = CHUNK_WORDS, CHUNK_OVERLAP_WORDS
+    if overlap >= size:
+        overlap = max(size // 4, 1)
+    words = (text or "").split()
+    chunks: List[str] = []
+    start = 0
+    while start < len(words):
+        end, length = start, 0
+        while end < len(words) and (end - start) < size:
+            addition = len(words[end]) + (1 if end > start else 0)
+            if length + addition > MAX_CHUNK_CHARS and end > start:
+                break
+            length += addition
+            end += 1
+        if end == start:
+            end = start + 1
+        window = words[start:end]
+        # A tail shorter than the minimum is a heading or a stray line, unless it is all there is.
+        if len(window) < MIN_CHUNK_WORDS and chunks:
+            break
+        chunks.append(" ".join(window))
+        if end >= len(words):
+            break
+        start += max(len(window) - overlap, 1)
+    return chunks
+
+
+def _sections(mom: Dict[str, Any]) -> List[tuple]:
+    """The minutes as (section name, text) — the order a reader would go through them."""
+    def joined(key):
+        return " ".join(str(v) for v in (mom.get(key) or []) if str(v).strip())
+
+    items = " ".join(
+        " ".join(x for x in (a.get("task", ""), a.get("assigned_to", ""), a.get("due", "")) if x)
+        for a in (mom.get("action_items") or []) if isinstance(a, dict)
+    )
+    people = " ".join(
+        " ".join(x for x in (a.get("name", ""), a.get("role", "")) if x)
+        for a in (mom.get("attendees") or []) if isinstance(a, dict)
+    )
+    return [(name, text) for name, text in (
+        ("Title", mom.get("title", "")),
+        ("Purpose", mom.get("purpose", "")),
+        ("Agenda", joined("agenda")),
+        ("Attendees", people),
+        ("Summary", mom.get("summary", "")),
+        ("Key points", joined("key_points")),
+        ("Key figures", joined("key_figures")),
+        ("Decisions", joined("decisions")),
+        ("Action items", items),
+    ) if str(text).strip()]
+
+
+class ChunkIndex:
+    """Writes the minutes into their doc-ingest index, one document per chunk.
+
+    Deliberately does NOT create the index. Theirs carries a synonym analyser, a dense_vector
+    mapping and the default_pipeline that computes the embedding; an index created here would have
+    none of that, would accept writes, and would return nothing from their search — a failure that
+    looks like success. If it is missing, say so and skip.
+    """
+
+    def __init__(self):
+        auth = (ELASTIC_USER, ELASTIC_PASSWORD) if ELASTIC_USER else None
+        self.client = Elasticsearch(ELASTIC_URL, basic_auth=auth, request_timeout=30)
+
+    def is_configured(self) -> bool:
+        return bool(ENABLE_CHUNK_INDEX and CHUNK_INDEX)
+
+    def index_mom(self, job, mom: Dict[str, Any], *, summary_bucket: str = "",
+                  summary_object_key: str = "") -> int:
+        """Chunk the minutes and write them. Returns the number of chunks written, 0 if skipped.
+
+        Never raises: the minutes are already stored and acknowledged by the time this runs, so a
+        search copy that fails must not turn a finished job into a failed one.
+        """
+        if not self.is_configured():
+            return 0
+        fid = job.conversation_id or "-".join(job.document_ids)
+        if not fid:
+            logger.warning("[CHUNKS] no conversation id or document ids — nothing to key chunks by")
+            return 0
+        try:
+            if not self.client.indices.exists(index=CHUNK_INDEX):
+                logger.error(f"[CHUNKS] index {CHUNK_INDEX!r} does not exist. It is created by their "
+                             "ingestion service, with the analyser, vector mapping and embedding "
+                             "pipeline their search needs — not created here. Skipping.")
+                return 0
+
+            # Chunk ids are deterministic, so an identical re-run overwrites itself. This is for the
+            # run that is NOT identical — a re-processed meeting with different sections leaves old
+            # chunks behind under ids this run never writes.
+            self.client.delete_by_query(index=CHUNK_INDEX, query={"term": {"fId": fid}},
+                                        refresh=True, conflicts="proceed")
+
+            name = (job.document_names[0] if job.document_names else "") or mom.get("title") or fid
+            path = f"{summary_bucket}/{summary_object_key}" if summary_bucket and summary_object_key else ""
+            operations: List[Dict[str, Any]] = []
+            for page_no, (section, text) in enumerate(_sections(mom), start=1):
+                for para, chunk in enumerate(_chunk(text)):
+                    operations.append({"index": {"_index": CHUNK_INDEX,
+                                                 "_id": f"{fid}_{page_no}_{para}",
+                                                 "routing": fid}})
+                    operations.append({"fId": fid, "text": f"{section}. {chunk}",
+                                       "pageNo": page_no, "para": para,
+                                       "fileName": name, "username": job.user_id or "",
+                                       "path": path, "in_trash": False})
+            if not operations:
+                logger.warning(f"[CHUNKS] {fid} produced no text to index")
+                return 0
+
+            reply = self.client.bulk(operations=operations, refresh=True)
+            written = len(operations) // 2
+            if reply.get("errors"):
+                failed = [i["index"] for i in reply.get("items", []) if i.get("index", {}).get("error")]
+                logger.error(f"[CHUNKS] {len(failed)} of {written} chunk(s) rejected by "
+                             f"{CHUNK_INDEX!r}: {failed[:2]}")
+                return written - len(failed)
+            logger.info(f"[CHUNKS] ↑ {written} chunk(s) for {fid} into {CHUNK_INDEX!r}")
+            return written
+        except Exception as e:
+            logger.error(f"[CHUNKS] could not write the search copy for {fid}: {e}")
+            return 0

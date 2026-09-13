@@ -40,7 +40,7 @@ sys.path.insert(0, "/app")
 from config import (KAFKA_ACK_TOPIC, KAFKA_BOOTSTRAP, KAFKA_GROUP_ID,  # noqa: E402
                     KAFKA_JOB_TOPIC, KAFKA_MAX_POLL_INTERVAL_MS, MOM_API_URL, MOM_TIMEOUT)
 from core.kafka_contract import build_ack, parse_job, summary_object_key  # noqa: E402
-from core.search_index import MomIndex  # noqa: E402
+from core.search_index import ChunkIndex, MomIndex  # noqa: E402
 from core.storage import ObjectStore  # noqa: E402
 from utils.docx_export import build_mom_docx  # noqa: E402
 
@@ -73,7 +73,7 @@ def _stop(signum, _frame):
     _running = False
 
 
-def process(job, store: ObjectStore, index: MomIndex) -> dict:
+def process(job, store: ObjectStore, index: MomIndex, chunks: ChunkIndex) -> dict:
     """One job → an acknowledgement. Never raises: a crash here would lose the ack."""
     t0 = time.time()
     try:
@@ -97,6 +97,10 @@ def process(job, store: ObjectStore, index: MomIndex) -> dict:
         bucket, key = store.upload(summary_object_key(job, hashlib.md5(docx_bytes).hexdigest()),
                                    docx_bytes, DOCX_MIME)
         index.index_mom(job, mom, source="attached", summary_bucket=bucket, summary_object_key=key)
+        # The searchable copy, in their doc-ingest shape. Last, and it never raises: by this point
+        # the minutes are stored and about to be acknowledged, so a failure here must not undo a
+        # finished job. Does nothing until ENABLE_CHUNK_INDEX and CHUNK_INDEX are set.
+        chunks.index_mom(job, mom, summary_bucket=bucket, summary_object_key=key)
         logger.info(f"[JOB {job.conversation_id}] done in {time.time()-t0:.0f}s — {bucket}/{key}")
         return build_ack(job, success=True, bucket=bucket, object_key=key,
                          description=(mom.get("summary") or "")[:300])
@@ -109,7 +113,7 @@ def main():
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
 
-    store, index = ObjectStore(), MomIndex()
+    store, index, chunks = ObjectStore(), MomIndex(), ChunkIndex()
     index.ensure_indices()
     consumer = KafkaConsumer(
         KAFKA_JOB_TOPIC,
@@ -143,7 +147,7 @@ def main():
                     continue
                 logger.info(f"[JOB {job.conversation_id}] received at offset {rec.offset}")
                 consumer.pause(tp)
-                pending = worker.submit(process, job, store, index)
+                pending = worker.submit(process, job, store, index, chunks)
                 while not pending.done():
                     _beat()
                     consumer.poll(timeout_ms=1000)   # paused → no records, but keeps the membership alive
