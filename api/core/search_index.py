@@ -17,8 +17,9 @@ from typing import Any, Dict, List
 from elasticsearch import Elasticsearch
 
 from config import (CHUNK_INDEX, CHUNK_OVERLAP_WORDS, CHUNK_WORDS, ELASTIC_CREATE_INDICES,
-                    ELASTIC_INDEX_ATTACHED, ELASTIC_INDEX_INGESTED, ELASTIC_PASSWORD, ELASTIC_URL,
-                    ELASTIC_USER, ENABLE_CHUNK_INDEX, MAX_CHUNK_CHARS, MIN_CHUNK_WORDS)
+                    ELASTIC_INDEX_ATTACHED, ELASTIC_INDEX_INGESTED, ELASTIC_INDEX_TRANSLATIONS,
+                    ELASTIC_PASSWORD, ELASTIC_URL, ELASTIC_USER, ENABLE_CHUNK_INDEX, MAX_CHUNK_CHARS,
+                    MIN_CHUNK_WORDS)
 
 logger = logging.getLogger(__name__)
 
@@ -198,10 +199,30 @@ class ChunkIndex:
 
     def index_mom(self, job, mom: Dict[str, Any], *, summary_bucket: str = "",
                   summary_object_key: str = "") -> int:
-        """Chunk the minutes and write them. Returns the number of chunks written, 0 if skipped.
+        """Chunk the minutes and write them, section by section. Returns chunks written, 0 if skipped."""
+        name = (job.document_names[0] if job.document_names else "") or mom.get("title") or ""
+        return self._write(job, _sections(mom), name, summary_bucket, summary_object_key)
 
-        Never raises: the minutes are already stored and acknowledged by the time this runs, so a
-        search copy that fails must not turn a finished job into a failed one.
+    def index_translation(self, job, result: Dict[str, Any], *, summary_bucket: str = "",
+                          summary_object_key: str = "") -> int:
+        """Chunk a translated file: the translation as one "page", the original transcript as the next.
+
+        Both languages go in, so a search in either finds the file — the embedding model is
+        multilingual, and a user who remembers a Hindi phrase from the recording should find it.
+        """
+        source, target = result.get("source_lang", ""), result.get("target_lang", "")
+        sections = [(f"Translation ({target})", result.get("translated_text", "")),
+                    (f"Original transcript ({source})", result.get("original_text", ""))]
+        name = job.document_names[0] if job.document_names else ""
+        return self._write(job, [(n, t) for n, t in sections if (t or "").strip()], name,
+                           summary_bucket, summary_object_key)
+
+    def _write(self, job, sections: List[tuple], name: str, summary_bucket: str,
+               summary_object_key: str) -> int:
+        """Write (section name, text) pairs as chunks keyed by the job. Returns chunks written.
+
+        Never raises: the result is already stored and about to be acknowledged by the time this
+        runs, so a search copy that fails must not turn a finished job into a failed one.
         """
         if not self.is_configured():
             return 0
@@ -222,10 +243,10 @@ class ChunkIndex:
             self.client.delete_by_query(index=CHUNK_INDEX, query={"term": {"fId": fid}},
                                         refresh=True, conflicts="proceed")
 
-            name = (job.document_names[0] if job.document_names else "") or mom.get("title") or fid
+            name = name or fid
             path = f"{summary_bucket}/{summary_object_key}" if summary_bucket and summary_object_key else ""
             operations: List[Dict[str, Any]] = []
-            for page_no, (section, text) in enumerate(_sections(mom), start=1):
+            for page_no, (section, text) in enumerate(sections, start=1):
                 for para, chunk in enumerate(_chunk(text)):
                     operations.append({"index": {"_index": CHUNK_INDEX,
                                                  "_id": f"{fid}_{page_no}_{para}",
@@ -250,3 +271,65 @@ class ChunkIndex:
         except Exception as e:
             logger.error(f"[CHUNKS] could not write the search copy for {fid}: {e}")
             return 0
+
+
+# ── translations: the structured record ─────────────────────────────────────────────────────────────
+# The counterpart of MomIndex for a translated audio or video file: one document per file, both texts
+# and the languages, so the product can list a user's translations and open one without MinIO.
+TRANSLATION_MAPPING: Dict[str, Any] = {
+    "properties": {
+        "tenant_id":          {"type": "keyword"},
+        "user_id":            {"type": "keyword"},
+        "conversation_id":    {"type": "keyword"},
+        "document_ids":       {"type": "keyword"},
+        "document_names":     {"type": "keyword"},
+        "indexed_at":         {"type": "date"},
+        "source_lang":        {"type": "keyword"},
+        "target_lang":        {"type": "keyword"},
+        "duration_s":         {"type": "float"},
+        "original_text":      {"type": "text"},
+        "translated_text":    {"type": "text"},
+        "passages":           {"type": "integer"},
+        "untranslated":       {"type": "integer"},
+        "summary_bucket":     {"type": "keyword"},
+        "summary_object_key": {"type": "keyword"},
+    }
+}
+
+
+class TranslationIndex:
+    def __init__(self):
+        auth = (ELASTIC_USER, ELASTIC_PASSWORD) if ELASTIC_USER else None
+        self.client = Elasticsearch(ELASTIC_URL, basic_auth=auth, request_timeout=30)
+
+    def ensure_index(self):
+        """Create the index if missing. No-op when their team owns the schema."""
+        if ELASTIC_CREATE_INDICES and not self.client.indices.exists(index=ELASTIC_INDEX_TRANSLATIONS):
+            self.client.indices.create(index=ELASTIC_INDEX_TRANSLATIONS, mappings=TRANSLATION_MAPPING)
+            logger.info(f"[ELASTIC] created index {ELASTIC_INDEX_TRANSLATIONS!r}")
+
+    def index_translation(self, job, result: Dict[str, Any], *, summary_bucket: str = "",
+                          summary_object_key: str = "") -> tuple:
+        """Write one translated file. Returns (index, _id).
+
+        Keyed by the conversation id, like the minutes: Kafka is at-least-once, and a redelivered
+        job must overwrite its record rather than add a second one.
+        """
+        import datetime
+        doc_id = job.conversation_id or "-".join(job.document_ids) or None
+        stats = result.get("stats") or {}
+        body = {
+            "tenant_id": job.tenant_id, "user_id": job.user_id, "conversation_id": job.conversation_id,
+            "document_ids": job.document_ids, "document_names": job.document_names,
+            "indexed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "source_lang": result.get("source_lang", ""), "target_lang": result.get("target_lang", ""),
+            "duration_s": result.get("duration_s"),
+            "original_text": result.get("original_text", ""),
+            "translated_text": result.get("translated_text", ""),
+            "passages": stats.get("passages"), "untranslated": stats.get("untranslated"),
+            "summary_bucket": summary_bucket, "summary_object_key": summary_object_key,
+        }
+        reply = self.client.index(index=ELASTIC_INDEX_TRANSLATIONS, id=doc_id, document=body, refresh=True)
+        logger.info(f"[ELASTIC] translation {doc_id} → {ELASTIC_INDEX_TRANSLATIONS} ({reply.get('result')})")
+        return ELASTIC_INDEX_TRANSLATIONS, reply.get("_id")
+

@@ -218,6 +218,9 @@ ELASTIC_USER = os.getenv("ELASTIC_USER", "").strip()
 ELASTIC_PASSWORD = os.getenv("ELASTIC_PASSWORD", "").strip()
 ELASTIC_INDEX_ATTACHED = os.getenv("ELASTIC_INDEX_ATTACHED", "mom-attached")
 ELASTIC_INDEX_INGESTED = os.getenv("ELASTIC_INDEX_INGESTED", "mom-ingested")
+# Where a translation consumer writes its structured record: one document per translated file, with
+# both texts and the languages. Separate from the minutes index because the fields share nothing.
+ELASTIC_INDEX_TRANSLATIONS = os.getenv("ELASTIC_INDEX_TRANSLATIONS", "translations")
 ELASTIC_CREATE_INDICES = os.getenv("ELASTIC_CREATE_INDICES", "true").lower() == "true"
 
 # ── the searchable copy, in the shape their platform already uses ─────────────

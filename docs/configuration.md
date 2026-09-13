@@ -82,5 +82,6 @@ nothing from their search.
 |---|---|---|---|
 | `JOB_KIND` | consumer | `mom` | `translate` makes this consumer a translation consumer: same image, own topics |
 | `TRANSLATE_API_URL` | consumer | `http://transcribe-api:8000/translate-media` | where a translation consumer sends the audio |
+| `ELASTIC_INDEX_TRANSLATIONS` | translate consumer | `translations` | the structured record of each translated file, created on startup like the minutes index |
 | `MAX_MEDIA_MB` | transcribe-api | 4096 | largest audio or video `/translate-media` accepts. The upload is streamed to disk, so this caps disk, not memory |
 

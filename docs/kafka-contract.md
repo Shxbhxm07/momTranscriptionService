@@ -153,9 +153,17 @@ three things differ:
 | input | audio | audio **or video** (mp4, webm, mkv, mov, m4a…): only the sound is used |
 | stored at | `<bucket>/<tenant>/summaries/<hash>.docx` | `<bucket>/<tenant>/translations/<hash>.docx` |
 | `description` | first 300 characters of the summary | first 300 characters of the translation |
+| structured index | `ELASTIC_INDEX_ATTACHED` | `ELASTIC_INDEX_TRANSLATIONS` |
 
 The .docx holds the translation first, then the original transcript under it, so any line can be
-checked against what was said. Translations are not written to Elasticsearch.
+checked against what was said.
+
+**Elasticsearch, the same two writes as the minutes:**
+
+| index | what | created by |
+|---|---|---|
+| `ELASTIC_INDEX_TRANSLATIONS` (default `translations`) | one document per file: both texts, the languages, the duration, where the .docx is. Id = `conversationId` | us, on startup, when `ELASTIC_CREATE_INDICES=true` |
+| `CHUNK_INDEX` on the translate consumer (e.g. `translate_v1`) | the searchable copy in their doc-ingest shape: the translation as one "page", the original transcript as the next, so a search in either language finds the file | **them** — same definition as `mom_v1`; we never create it |
 
 **Timing.** Transcription runs at the speed of the Whisper deployment (on a processor, roughly 0.8x
 real time), then translation. Measured on the GB10: a 75-second English video in 85 s end to end.

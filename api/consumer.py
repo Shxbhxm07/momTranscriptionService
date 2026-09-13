@@ -42,7 +42,7 @@ from config import (JOB_KIND, KAFKA_ACK_TOPIC, KAFKA_BOOTSTRAP, KAFKA_GROUP_ID, 
                     KAFKA_JOB_TOPIC, KAFKA_MAX_POLL_INTERVAL_MS, MOM_API_URL, MOM_TIMEOUT,
                     TRANSLATE_API_URL)
 from core.kafka_contract import build_ack, parse_job, summary_object_key  # noqa: E402
-from core.search_index import ChunkIndex, MomIndex  # noqa: E402
+from core.search_index import ChunkIndex, MomIndex, TranslationIndex  # noqa: E402
 from core.storage import ObjectStore  # noqa: E402
 from utils.audio_processing import media_file_to_wav  # noqa: E402
 from utils.docx_export import build_mom_docx, build_translation_docx  # noqa: E402
@@ -112,7 +112,7 @@ def process(job, store: ObjectStore, index: MomIndex, chunks: ChunkIndex) -> dic
         return build_ack(job, success=False, description=f"{type(e).__name__}: {e}")
 
 
-def process_translation(job, store: ObjectStore) -> dict:
+def process_translation(job, store: ObjectStore, tindex: TranslationIndex, chunks: ChunkIndex) -> dict:
     """One translation job → an acknowledgement. Never raises: a crash here would lose the ack.
 
     The media is streamed from MinIO to disk and reduced to its audio track HERE, before it is sent:
@@ -145,6 +145,10 @@ def process_translation(job, store: ObjectStore) -> dict:
         bucket, key = store.upload(
             summary_object_key(job, hashlib.md5(docx_bytes).hexdigest(), folder="translations"),
             docx_bytes, DOCX_MIME)
+        # The same three destinations as the minutes: the file (above), the structured record, and
+        # the searchable chunks. The chunk copy never raises, so it cannot fail a finished job.
+        tindex.index_translation(job, result, summary_bucket=bucket, summary_object_key=key)
+        chunks.index_translation(job, result, summary_bucket=bucket, summary_object_key=key)
         logger.info(f"[JOB {job.conversation_id}] {result.get('source_lang')} → {result.get('target_lang')} "
                     f"done in {time.time()-t0:.0f}s — {bucket}/{key}")
         return build_ack(job, success=True, bucket=bucket, object_key=key,
@@ -173,8 +177,9 @@ def main():
         index.ensure_indices()
         handle = lambda job: process(job, store, index, chunks)  # noqa: E731
     else:
-        # Translations are stored and acknowledged, not indexed: nothing asked for them to be searchable.
-        handle = lambda job: process_translation(job, store)     # noqa: E731
+        tindex, chunks = TranslationIndex(), ChunkIndex()
+        tindex.ensure_index()
+        handle = lambda job: process_translation(job, store, tindex, chunks)  # noqa: E731
     consumer = KafkaConsumer(
         KAFKA_JOB_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP.split(","),

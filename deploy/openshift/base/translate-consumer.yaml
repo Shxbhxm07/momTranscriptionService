@@ -28,6 +28,10 @@ spec:
         - {name: KAFKA_ACK_TOPIC, value: translate.acks}
         - {name: KAFKA_GROUP_ID, value: offline-mom-translate}
         - {name: TRANSLATE_API_URL, value: "http://transcribe-api:8000/translate-media"}
+        # Its own indices. Without these it would inherit the MINUTES search index from the shared
+        # ConfigMap and write translations in among the meetings.
+        - {name: ELASTIC_INDEX_TRANSLATIONS, value: translations}
+        - {name: CHUNK_INDEX, value: translate_v1}
         resources:
           # More than mom-consumer: this one runs ffmpeg to pull the sound out of a video before
           # sending it, so the upload to transcribe-api is the audio track, not the whole file.
