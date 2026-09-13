@@ -44,6 +44,7 @@ from config import (JOB_KIND, KAFKA_ACK_TOPIC, KAFKA_BOOTSTRAP, KAFKA_GROUP_ID, 
 from core.kafka_contract import build_ack, parse_job, summary_object_key  # noqa: E402
 from core.search_index import ChunkIndex, MomIndex, TranslationIndex  # noqa: E402
 from core.storage import ObjectStore  # noqa: E402
+from core.translate_doc import describe_media_translation  # noqa: E402
 from utils.audio_processing import media_file_to_wav  # noqa: E402
 from utils.docx_export import build_mom_docx, build_translation_docx  # noqa: E402
 
@@ -140,6 +141,10 @@ def process_translation(job, store: ObjectStore, tindex: TranslationIndex, chunk
             detail = r.json().get("detail") if r.headers.get("content-type", "").startswith("application/json") else r.text
             raise RuntimeError(f"translate-media answered {r.status_code}: {str(detail)[:300]}")
         result = r.json()
+        # Built here, not taken from the API: only this side knows the file's real name (the API
+        # was sent the audio track as .wav, so it would call a video "audio"), and an API image
+        # older than the consumer sends no description at all.
+        result["description"] = describe_media_translation(name, result)
 
         docx_bytes = build_translation_docx(result, name)
         bucket, key = store.upload(
@@ -152,7 +157,7 @@ def process_translation(job, store: ObjectStore, tindex: TranslationIndex, chunk
         logger.info(f"[JOB {job.conversation_id}] {result.get('source_lang')} → {result.get('target_lang')} "
                     f"done in {time.time()-t0:.0f}s — {bucket}/{key}")
         return build_ack(job, success=True, bucket=bucket, object_key=key,
-                         description=(result.get("translated_text") or "")[:300])
+                         description=result["description"])
     except Exception as e:
         logger.error(f"[JOB {job.conversation_id}] failed after {time.time()-t0:.0f}s: {e}")
         return build_ack(job, success=False, description=f"{type(e).__name__}: {e}")

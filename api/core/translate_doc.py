@@ -24,6 +24,7 @@ could not translate. Untranslated text still falls back to the source — see _f
 but it is counted, listed and named in the response rather than hidden.
 """
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -111,6 +112,110 @@ def detect_language(text: str) -> str:
         return "English"
     return "Hindi" if deva / (deva + latin) >= _HINDI_LETTER_RATIO else "English"
 
+
+
+# ── the message that goes back with a translated recording ────────────────────
+
+# The chat reply the backend shows beside the .docx. It is written in the language of the
+# TRANSLATION, because that is the language the reader asked for: whoever sent English speech to
+# get Hindi reads Hindi. It is built from facts the pipeline already has, never by the model, so it
+# cannot claim a term was kept or a passage translated when that did not happen.
+_VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".flv", ".wmv", ".3gp", ".mpeg", ".mpg", ".ts"}
+_LANG_IN_HINDI = {"Hindi": "हिंदी", "English": "अंग्रेज़ी"}
+# A run of Latin words inside a Hindi translation: a name or term the model kept as spoken.
+# The first word starts with a letter, so "T20" and "IPL" count but a bare "2024" does not.
+_WORD_TAIL = r"[A-Za-z0-9]*(?:[-.'’&][A-Za-z0-9]+)*"
+_LATIN_RUN = re.compile(rf"[A-Za-z]{_WORD_TAIL}(?:\s+[A-Za-z0-9]{_WORD_TAIL})*")
+
+
+def _kept_terms(text: str, limit: int = 4) -> List[str]:
+    """Up to `limit` distinct Latin-script terms, in order of first appearance.
+
+    Runs longer than three words are skipped: that is an English sentence the model left behind,
+    not a term it chose to keep, and it is not something to advertise.
+    """
+    seen, terms = set(), []
+    for m in _LATIN_RUN.finditer(text or ""):
+        term = m.group(0).strip()
+        words = term.lower().split()
+        # A term already listed, or one word of a longer term already listed ("t20" after
+        # "T20 World Cup"), would read as a repeat.
+        if len(term) < 2 or len(words) > 3 or " ".join(words) in seen or (len(words) == 1 and words[0] in seen):
+            continue
+        seen.add(" ".join(words))
+        seen.update(words)
+        terms.append(term)
+        if len(terms) == limit:
+            break
+    return terms
+
+
+def _duration(seconds, hindi: bool) -> str:
+    """35 → '35 सेकंड' / '35 s'; 558 → '9 मिनट 18 सेकंड' / '9 min 18 s'. '' when unknown."""
+    try:
+        total = int(float(seconds or 0))     # truncated, as the .docx heading does
+    except (TypeError, ValueError):
+        return ""
+    if total <= 0:
+        return ""
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    if hindi:
+        parts = [(hours, "घंटा" if hours == 1 else "घंटे"), (minutes, "मिनट"), (secs, "सेकंड")]
+    else:
+        parts = [(hours, "h"), (minutes, "min"), (secs, "s")]
+    return " ".join(f"{n} {unit}" for n, unit in parts if n)
+
+
+def describe_media_translation(file_name: str, result: Dict) -> str:
+    """One or two sentences, in the target language, saying what was translated.
+
+    English speech → Hindi text gets a Hindi description; Hindi speech → English text gets an
+    English one. `result` is the /translate-media response. The file name is the caller's, not
+    the API's: the consumer sends the API only the audio track, renamed .wav, so the API alone
+    would call every video "audio".
+    """
+    source = result.get("source_lang") or ""
+    target = result.get("target_lang") or ""
+    stats = result.get("stats") or {}
+    untranslated = int(stats.get("untranslated") or 0)
+    passages = int(stats.get("passages") or 0)
+    name = (file_name or "").strip()
+    video = os.path.splitext(name)[1].lower() in _VIDEO_EXTS
+
+    if target == "Hindi":
+        src = _LANG_IN_HINDI.get(source, source)
+        what = f"{'वीडियो' if video else 'ऑडियो'} फ़ाइल" + (f" {name}" if name else "")
+        duration = _duration(result.get("duration_s"), hindi=True)
+        if duration:
+            what += f" ({duration})"
+        # "पूरी" (the whole) only when it is true.
+        parts = [f"मैंने {'पूरी ' if not untranslated else ''}{what} का {src} से हिंदी में अनुवाद कर दिया है।"]
+        if untranslated:
+            of = f"{passages} में से " if passages else ""
+            if untranslated == 1:
+                parts.append(f"{of}1 हिस्से का अनुवाद नहीं हो सका; वह मूल {src} में ही दिया गया है।")
+            else:
+                parts.append(f"{of}{untranslated} हिस्सों का अनुवाद नहीं हो सका; वे मूल {src} में ही दिए गए हैं।")
+        elif source == "English":
+            # Latin text in a fully translated Hindi result can only be what the model kept.
+            terms = _kept_terms(result.get("translated_text", ""))
+            if terms:
+                parts.append(f"{', '.join(terms)} जैसे नाम और शब्द अंग्रेज़ी में ही रखे हैं।")
+        parts.append(f"मूल {src} ट्रांसक्रिप्ट भी फ़ाइल में साथ दी गई है।")
+        return " ".join(parts)
+
+    what = f"{'video' if video else 'audio'} file" + (f" {name}" if name else "")
+    duration = _duration(result.get("duration_s"), hindi=False)
+    if duration:
+        what += f" ({duration})"
+    parts = [f"I have translated the {'entire ' if not untranslated else ''}{what} from {source} into {target}."]
+    if untranslated:
+        of = f" of {passages}" if passages else ""
+        parts.append(f"{untranslated}{of} passage{'s' if passages != 1 else ''} could not be translated "
+                     f"and {'is' if untranslated == 1 else 'are'} left in {source}.")
+    parts.append(f"The original {source} transcript is included in the file.")
+    return " ".join(parts)
 
 # ── chunking ─────────────────────────────────────────────────────────────────
 

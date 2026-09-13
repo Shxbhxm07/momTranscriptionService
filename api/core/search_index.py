@@ -289,6 +289,7 @@ TRANSLATION_MAPPING: Dict[str, Any] = {
         "duration_s":         {"type": "float"},
         "original_text":      {"type": "text"},
         "translated_text":    {"type": "text"},
+        "description":        {"type": "text"},
         "passages":           {"type": "integer"},
         "untranslated":       {"type": "integer"},
         "summary_bucket":     {"type": "keyword"},
@@ -326,6 +327,7 @@ class TranslationIndex:
             "duration_s": result.get("duration_s"),
             "original_text": result.get("original_text", ""),
             "translated_text": result.get("translated_text", ""),
+            "description": result.get("description", ""),
             "passages": stats.get("passages"), "untranslated": stats.get("untranslated"),
             "summary_bucket": summary_bucket, "summary_object_key": summary_object_key,
         }

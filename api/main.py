@@ -466,7 +466,8 @@ def _resolve_languages(text: str, source_lang: Optional[str], target_lang: Optio
 # document translator turns that text into the other language. Whisper's own translate task was the
 # tempting shortcut for Hindi → English, but it only ever translates INTO English and never returns
 # the original words, and the caller wants both.
-from core.translate_doc import TranslationError, detect_language, normalize_lang  # noqa: E402
+from core.translate_doc import (TranslationError, describe_media_translation,  # noqa: E402
+                                detect_language, normalize_lang)
 
 # Whisper's language id regularly labels Hindi speech as Urdu, and an unpinned transcribe task then
 # writes URDU SCRIPT — which the Hindi translator's script checks cannot read. Both are Hindi here.
@@ -596,7 +597,7 @@ def translate_media(
                 f"are given in {source} ({', '.join(f'{k}: {v}' for k, v in sorted(translated.failure_reasons.items()))}).")
         logger.info(f"[MEDIA] ✓ {filename}: {source} → {target}, {result.get('duration', 0):.0f}s of audio, "
                     f"{translated.translated}/{translated.chunks} passages, {translated.untranslated} untranslated")
-        return {
+        response = {
             "success": True,
             "source_lang": source,
             "target_lang": target,
@@ -608,6 +609,9 @@ def translate_media(
             "stats": {"passages": translated.chunks, "translated": translated.translated,
                       "untranslated": translated.untranslated, "model_calls": translated.model_calls},
         }
+        # The chat reply, in the language of the translation — see describe_media_translation.
+        response["description"] = describe_media_translation(filename, response)
+        return response
     finally:
         for path in (upload_path, wav_path):
             if path:

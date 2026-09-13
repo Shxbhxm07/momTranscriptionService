@@ -152,11 +152,24 @@ three things differ:
 |---|---|---|
 | input | audio | audio **or video** (mp4, webm, mkv, mov, m4a…): only the sound is used |
 | stored at | `<bucket>/<tenant>/summaries/<hash>.docx` | `<bucket>/<tenant>/translations/<hash>.docx` |
-| `description` | first 300 characters of the summary | first 300 characters of the translation |
+| `description` | first 300 characters of the summary | a short reply for the chat, **in the language of the translation** (below) |
 | structured index | `ELASTIC_INDEX_ATTACHED` | `ELASTIC_INDEX_TRANSLATIONS` |
 
 The .docx holds the translation first, then the original transcript under it, so any line can be
 checked against what was said.
+
+**The translation `description`** is written for the backend to show beside the file, in the
+language the user asked for: **English speech → a Hindi description, Hindi speech → an English
+one.** It says what was translated (audio or video, the file name, the length), which names and
+terms were kept in English, and how many passages could not be translated, if any. It is built
+from what the job actually did, never by the model, so it cannot claim something that did not
+happen. The same text is stored as `description` in the `ELASTIC_INDEX_TRANSLATIONS` record.
+
+```
+मैंने पूरी वीडियो फ़ाइल clip.mp4 (35 सेकंड) का अंग्रेज़ी से हिंदी में अनुवाद कर दिया है। T20 World Cup जैसे नाम और शब्द अंग्रेज़ी में ही रखे हैं। मूल अंग्रेज़ी ट्रांसक्रिप्ट भी फ़ाइल में साथ दी गई है।
+
+I have translated the audio file call.m4a (1 h 2 min 5 s) from Hindi into English. 2 of 5 passages could not be translated and are left in Hindi. The original Hindi transcript is included in the file.
+```
 
 **Elasticsearch, the same two writes as the minutes:**
 
