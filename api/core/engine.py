@@ -41,7 +41,7 @@ import requests
 from wave import Error as wave_Error
 
 from config import (BEAM_SIZE, LANG_DETECT_MIN_PROB, LANG_DETECT_SECONDS, MAX_CONTEXT,
-                    REQUEST_TIMEOUT, TEMPERATURE, WHISPERCPP_URL)
+                    REQUEST_TIMEOUT, TEMPERATURE, TRANSCRIBE_API_URL, WHISPERCPP_URL)
 from utils.text_processing import (
     clean_segment_list,
     filter_hallucinated_segments,
@@ -68,8 +68,11 @@ class TranscriptionEngine:
     holds nothing but a connection pool and can be shared across workers freely.
     """
 
-    def __init__(self, base_url: str = WHISPERCPP_URL):
+    def __init__(self, base_url: str = WHISPERCPP_URL, remote_url: str = TRANSCRIBE_API_URL):
         self.base_url = base_url.rstrip("/")
+        # A media-transcription service used INSTEAD of whisper.cpp when set (see config). Every
+        # public method below checks it first, so callers never know which one answered.
+        self.remote_url = (remote_url or "").rstrip("/")
         # One pooled Session for the process. Reuses the TCP connection across requests
         # instead of a fresh handshake per upload.
         self.session = requests.Session()
@@ -78,6 +81,15 @@ class TranscriptionEngine:
     def is_ready(self) -> bool:
         """whisper.cpp loads the model BEFORE it binds the port, so a successful connect
         is a genuine 'model is on the GPU' signal, not just 'process started'."""
+        if self.remote_url:
+            # A FastAPI service: its schema answering proves the process is up and routed.
+            from urllib.parse import urlsplit
+            parts = urlsplit(self.remote_url)
+            try:
+                r = self.session.get(f"{parts.scheme}://{parts.netloc}/openapi.json", timeout=5)
+                return r.status_code == 200
+            except requests.RequestException:
+                return False
         try:
             # No /health route on whisper-server; any answered request proves the bind.
             self.session.get(f"{self.base_url}/", timeout=5)
@@ -108,6 +120,11 @@ class TranscriptionEngine:
         has to be chosen before the full decode runs, so the language has to be known first.
         30 seconds is enough for Whisper's language ID and costs a few seconds.
         """
+        if self.remote_url:
+            # The remote service has no language id. "" is what an unsure probe returns anyway, and
+            # every caller already handles it: minutes keep the default, translation decides from
+            # the transcript's own script once it has one.
+            return ""
         try:
             head = self._head_wav(audio_path, LANG_DETECT_SECONDS)
             r = self.session.post(
@@ -146,6 +163,9 @@ class TranscriptionEngine:
         The trade is that transcribe lower-cases proper nouns where translate capitalises
         them, which the downstream correction pass largely repairs ("C ulp." -> "Culp.").
         """
+        if self.remote_url:
+            return self._transcribe_remote(audio_path, translate)
+
         with open(audio_path, "rb") as f:
             audio_data = f.read()
 
@@ -219,6 +239,51 @@ class TranscriptionEngine:
             )
 
         return self._parse(response.json())
+
+    # ── the remote media-transcription service ─────────────────────────────────
+    def _transcribe_remote(self, audio_path: str, translate: bool) -> Dict[str, Any]:
+        """The same result shape as whisper.cpp, from a service that returns {text, segments}.
+
+        What it does NOT do, and what that costs:
+          * no translate task — it always writes the language SPOKEN. Translation wants exactly that.
+            The minutes path asked for English and now gets Hindi or Hinglish for a Hindi meeting,
+            which the minutes prompts read, but that combination is unmeasured.
+          * no language in the reply — decided here from the transcript's script, the same rule
+            document translation uses; mixed Hindi-English speech comes back largely in Devanagari,
+            which that rule reads as Hindi.
+          * whole-second timestamps and no word timings — only speaker labelling used words, and
+            diarization is off.
+        """
+        from core.translate_doc import detect_language
+
+        if translate:
+            logger.info("[TRANSCRIBE] remote service has no translate task — returning the spoken language")
+        name = os.path.basename(audio_path)
+        logger.info(f"[TRANSCRIBE] POST {self.remote_url} — {name}")
+        try:
+            with open(audio_path, "rb") as f:
+                r = self.session.post(self.remote_url, files={"file": (name, f, "audio/wav")},
+                                      timeout=REQUEST_TIMEOUT)
+        except requests.RequestException as e:
+            raise RuntimeError(f"Cannot reach the transcription service at {self.remote_url}: {e}") from e
+        if r.status_code != 200:
+            raise RuntimeError(f"transcription service error {r.status_code}: {r.text[:300]}")
+
+        body = r.json()
+        segments = [
+            {"text": (s.get("text") or "").strip(), "start": float(s.get("start") or 0.0),
+             "end": float(s.get("end") or 0.0), "words": []}
+            for s in (body.get("segments") or []) if (s.get("text") or "").strip()
+        ]
+        text = (body.get("text") or " ".join(s["text"] for s in segments)).strip()
+        duration = segments[-1]["end"] if segments else 0.0
+        if not segments and text:
+            segments = [{"text": text, "start": 0.0, "end": duration, "words": []}]
+        language = "hi" if detect_language(text) == "Hindi" else "en"
+        logger.info(f"[TRANSCRIBE] ✓ {len(segments)} segments, {len(text)} chars, "
+                    f"language from script = {language}, {duration:.0f}s")
+        return {"text": text, "segments": segments, "source_language": language,
+                "duration": round(duration, 2)}
 
     # ── response parsing (verbose_json, OpenAI-audio shaped) ─────────────────
     @staticmethod

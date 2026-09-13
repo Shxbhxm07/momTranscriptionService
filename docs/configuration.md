@@ -46,6 +46,7 @@ nemo-service is not deployed and attendees come only from names said aloud.
 | variable | value | |
 |---|---|---|
 | `WHISPER_MODEL` | /models/whisper/ggml-large-v3.bin | local file |
+| `TRANSCRIBE_API_URL` (transcribe-api) | empty | use a media-transcription service INSTEAD of our Whisper: its full endpoint, e.g. `http://transcription-teamsync.apps.lab.ocp.lan/v1/media/audio-video/transcription`. A stopgap for a cluster where our Whisper cannot run yet. Measured 2026-09-13: about 3.5x real time plus ~1 min per request, and it writes the language spoken (no translate task, no language id), so Hindi meetings reach the minutes writer as Hindi/Hinglish — unmeasured for minutes accuracy. Translation is unaffected: it wants the spoken language anyway |
 | `WHISPER_VAD_MODEL` | /models/whisper/ggml-silero-v6.2.0.bin | local file |
 | `MAX_CONTEXT` (transcribe-api) | 32 | text context sent to Whisper per request. Leave it alone: 0 and 64 both failed when it was measured, and a 2026-09-12 re-measurement at the beam size we use found no reason to change it |
 | `DIARIZATION_MODEL_PATH` | /models/nemo/titanet-l.nemo | local file — by name it downloads |

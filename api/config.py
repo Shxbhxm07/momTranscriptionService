@@ -22,6 +22,13 @@ import os
 # loaded at whisper-server startup and reused for every request for the life of the
 # container, no matter how many API workers sit in front of it.
 WHISPERCPP_URL = os.getenv("WHISPERCPP_URL", "http://whisper-server:8080").rstrip("/")
+# A media-transcription service to use INSTEAD of whisper.cpp — the full endpoint URL, e.g.
+# http://transcription-teamsync.apps.lab.ocp.lan/v1/media/audio-video/transcription. It takes one
+# multipart `file` and returns {"text", "segments": [{"text", "start", "end"}]}. Set it on a cluster
+# where our Whisper cannot run yet; leave it empty to use whisper.cpp. What it cannot do — detect or
+# report the language, translate to English, give word timings — is listed where it matters, in
+# core/engine.py.
+TRANSCRIBE_API_URL = os.getenv("TRANSCRIBE_API_URL", "").strip()
 
 # Long meetings are legitimately slow on a single GPU. whisper.cpp streams the whole file
 # in one call (no 25 MB cloud limit to chunk around), so the only guard needed is a

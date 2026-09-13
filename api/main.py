@@ -64,6 +64,7 @@ from config import (
     OCR_MAX_PAGES,
     TRANSCRIBE_RETRY_LOST_FRACTION,
     TRANSCRIBE_RETRY_LOST_S,
+    TRANSCRIBE_API_URL,
     WHISPERCPP_URL,
 )
 from core.diarize import Diarizer
@@ -162,9 +163,9 @@ def health():
         "offline": bool(llm_offline),
         "pipeline": {
             "stt": {
-                "model": "whisper large-v3 (ggml, CUDA)",
-                "task": "translate → English",
-                "url": WHISPERCPP_URL,
+                "model": "remote media-transcription service" if TRANSCRIBE_API_URL else "whisper large-v3 (ggml, CUDA)",
+                "task": "spoken language (remote service cannot translate)" if TRANSCRIBE_API_URL else "translate → English",
+                "url": TRANSCRIBE_API_URL or WHISPERCPP_URL,
                 "reachable": asr_ok,
             },
             "diarization": {
