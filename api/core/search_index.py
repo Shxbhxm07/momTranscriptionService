@@ -12,7 +12,7 @@ mapping would make every string a text+keyword pair and silently turn `decisions
 field nobody can aggregate on.
 """
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from elasticsearch import Elasticsearch
 
@@ -190,12 +190,14 @@ class ChunkIndex:
     looks like success. If it is missing, say so and skip.
     """
 
-    def __init__(self):
+    def __init__(self, index: Optional[str] = None):
+        """`index` defaults to CHUNK_INDEX; the API's /v1/translate passes TRANSLATE_CHUNK_INDEX."""
         auth = (ELASTIC_USER, ELASTIC_PASSWORD) if ELASTIC_USER else None
         self.client = Elasticsearch(ELASTIC_URL, basic_auth=auth, request_timeout=30)
+        self.index = CHUNK_INDEX if index is None else index
 
     def is_configured(self) -> bool:
-        return bool(ENABLE_CHUNK_INDEX and CHUNK_INDEX)
+        return bool(ENABLE_CHUNK_INDEX and self.index)
 
     def index_mom(self, job, mom: Dict[str, Any], *, summary_bucket: str = "",
                   summary_object_key: str = "") -> int:
@@ -231,8 +233,8 @@ class ChunkIndex:
             logger.warning("[CHUNKS] no conversation id or document ids — nothing to key chunks by")
             return 0
         try:
-            if not self.client.indices.exists(index=CHUNK_INDEX):
-                logger.error(f"[CHUNKS] index {CHUNK_INDEX!r} does not exist. It is created by their "
+            if not self.client.indices.exists(index=self.index):
+                logger.error(f"[CHUNKS] index {self.index!r} does not exist. It is created by their "
                              "ingestion service, with the analyser, vector mapping and embedding "
                              "pipeline their search needs — not created here. Skipping.")
                 return 0
@@ -240,7 +242,7 @@ class ChunkIndex:
             # Chunk ids are deterministic, so an identical re-run overwrites itself. This is for the
             # run that is NOT identical — a re-processed meeting with different sections leaves old
             # chunks behind under ids this run never writes.
-            self.client.delete_by_query(index=CHUNK_INDEX, query={"term": {"fId": fid}},
+            self.client.delete_by_query(index=self.index, query={"term": {"fId": fid}},
                                         refresh=True, conflicts="proceed")
 
             name = name or fid
@@ -248,7 +250,7 @@ class ChunkIndex:
             operations: List[Dict[str, Any]] = []
             for page_no, (section, text) in enumerate(sections, start=1):
                 for para, chunk in enumerate(_chunk(text)):
-                    operations.append({"index": {"_index": CHUNK_INDEX,
+                    operations.append({"index": {"_index": self.index,
                                                  "_id": f"{fid}_{page_no}_{para}",
                                                  "routing": fid}})
                     operations.append({"fId": fid, "text": f"{section}. {chunk}",
@@ -264,9 +266,9 @@ class ChunkIndex:
             if reply.get("errors"):
                 failed = [i["index"] for i in reply.get("items", []) if i.get("index", {}).get("error")]
                 logger.error(f"[CHUNKS] {len(failed)} of {written} chunk(s) rejected by "
-                             f"{CHUNK_INDEX!r}: {failed[:2]}")
+                             f"{self.index!r}: {failed[:2]}")
                 return written - len(failed)
-            logger.info(f"[CHUNKS] ↑ {written} chunk(s) for {fid} into {CHUNK_INDEX!r}")
+            logger.info(f"[CHUNKS] ↑ {written} chunk(s) for {fid} into {self.index!r}")
             return written
         except Exception as e:
             logger.error(f"[CHUNKS] could not write the search copy for {fid}: {e}")

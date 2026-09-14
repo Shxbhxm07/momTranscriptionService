@@ -77,8 +77,12 @@ def _stop(signum, _frame):
     _running = False
 
 
-def process(job, store: ObjectStore, index: MomIndex, chunks: ChunkIndex) -> dict:
-    """One job → an acknowledgement. Never raises: a crash here would lose the ack."""
+def process(job, store: ObjectStore, index: MomIndex, chunks: ChunkIndex, api_url: str = MOM_API_URL) -> dict:
+    """One job → an acknowledgement. Never raises: a crash here would lose the ack.
+
+    `api_url` is the minutes endpoint. The consumer uses MOM_API_URL; transcribe-api's own POST /v1/mom
+    runs this same function and passes its loopback address.
+    """
     t0 = time.time()
     try:
         if not job.file_urls:
@@ -90,7 +94,7 @@ def process(job, store: ObjectStore, index: MomIndex, chunks: ChunkIndex) -> dic
         name = job.document_names[0] if job.document_names else job.file_urls[0].rsplit("/", 1)[-1]
         logger.info(f"[JOB {job.conversation_id}] downloaded {name} ({len(audio)/1048576:.1f} MB)")
 
-        r = requests.post(MOM_API_URL, files={"audio": (name, audio, "audio/mpeg")}, timeout=MOM_TIMEOUT)
+        r = requests.post(api_url, files={"audio": (name, audio, "audio/mpeg")}, timeout=MOM_TIMEOUT)
         r.raise_for_status()
         body = r.json()
         mom = body.get("mom")
@@ -113,7 +117,8 @@ def process(job, store: ObjectStore, index: MomIndex, chunks: ChunkIndex) -> dic
         return build_ack(job, success=False, description=f"{type(e).__name__}: {e}")
 
 
-def process_translation(job, store: ObjectStore, tindex: TranslationIndex, chunks: ChunkIndex) -> dict:
+def process_translation(job, store: ObjectStore, tindex: TranslationIndex, chunks: ChunkIndex,
+                        api_url: str = TRANSLATE_API_URL) -> dict:
     """One translation job → an acknowledgement. Never raises: a crash here would lose the ack.
 
     The media is streamed from MinIO to disk and reduced to its audio track HERE, before it is sent:
@@ -135,7 +140,7 @@ def process_translation(job, store: ObjectStore, tindex: TranslationIndex, chunk
         os.unlink(media)
         media = None
         with open(wav, "rb") as fh:
-            r = requests.post(TRANSLATE_API_URL, files={"file": (os.path.splitext(name)[0] + ".wav", fh, "audio/wav")},
+            r = requests.post(api_url, files={"file": (os.path.splitext(name)[0] + ".wav", fh, "audio/wav")},
                               timeout=MOM_TIMEOUT)
         if r.status_code != 200:
             detail = r.json().get("detail") if r.headers.get("content-type", "").startswith("application/json") else r.text

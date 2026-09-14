@@ -67,7 +67,9 @@ def _dict(value: Any) -> Dict[str, Any]:
 
 def _paths(msg: Dict[str, Any]) -> List[str]:
     """The audio to fetch, from `file_urls` (reference shape) or `path` (the newer backend)."""
-    urls = list(_get(msg, "file_urls", "fileUrls", default=[]) or [])
+    # Blank entries are dropped: a caller filling a fixed-size list sends "" for the unused slot
+    # (the doc-compare reference does), and "" as a MinIO key fails on a confusing error.
+    urls = [u for u in (_get(msg, "file_urls", "fileUrls", default=[]) or []) if isinstance(u, str) and u.strip()]
     if urls:
         return urls
     single = _get(msg, "path", default="")

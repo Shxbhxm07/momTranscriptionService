@@ -260,6 +260,16 @@ KAFKA_MAX_POLL_INTERVAL_MS = int(os.getenv("KAFKA_MAX_POLL_INTERVAL_MS", str(20 
 MOM_API_URL = os.getenv("MOM_API_URL", "http://transcribe-api:8000/transcribe-and-generate-mom")
 TRANSLATE_API_URL = os.getenv("TRANSLATE_API_URL", "http://transcribe-api:8000/translate-media")
 
+# ── the same jobs over HTTP (POST /v1/mom, /v1/translate on transcribe-api) ──────
+# Those endpoints run the consumer's own job code, which calls this API's /transcribe-and-generate-mom
+# and /translate-media. Inside transcribe-api that is itself, so it goes over loopback and never
+# leaves the pod.
+SELF_API_URL = os.getenv("SELF_API_URL", "http://127.0.0.1:8000").rstrip("/")
+# Where /v1/translate writes its searchable chunks. Not CHUNK_INDEX: one API process serves both
+# kinds of job, while each consumer has its own CHUNK_INDEX. Empty = translation chunks are skipped
+# rather than mixed into the minutes' index.
+TRANSLATE_CHUNK_INDEX = os.getenv("TRANSLATE_CHUNK_INDEX", "").strip()
+
 # ONE IMAGE, TWO CONSUMERS. "mom" turns a recording into minutes; "translate" turns an audio or video
 # file into translated text. They are deployed separately, each with its own topics, so a long video
 # translation never sits in front of a meeting (the consumer handles one job at a time by design).

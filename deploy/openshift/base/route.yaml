@@ -1,4 +1,5 @@
-# Only needed if something outside the cluster calls the API directly (e.g. /translate-document).
+# Only needed if something outside the cluster calls the API directly (/v1/mom, /v1/translate,
+# /translate-document).
 # The timeout annotation is REQUIRED: the router default is 30 s, and a MoM or a long document takes
 # minutes, so without it every real request is cut off with a 504.
 apiVersion: route.openshift.io/v1

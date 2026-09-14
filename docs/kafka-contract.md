@@ -180,3 +180,52 @@ I have translated the audio file call.m4a (1 h 2 min 5 s) from Hindi into Englis
 
 **Timing.** Transcription runs at the speed of the Whisper deployment (on a processor, roughly 0.8x
 real time), then translation. Measured on the GB10: a 75-second English video in 85 s end to end.
+
+## The same jobs over HTTP
+
+For a caller that would rather make a request than produce to a topic, transcribe-api takes the
+**same JSON as the Kafka message** and returns **the same acknowledgement** the consumer would
+publish. It runs the consumer's own job code, so the Word file, MinIO, Elasticsearch and the echoed
+backend fields behave exactly as above.
+
+| endpoint | same as | writes to |
+|---|---|---|
+| `POST /v1/mom` | a `mom.jobs` message | MinIO `summaries/`, `ELASTIC_INDEX_ATTACHED`, `CHUNK_INDEX` |
+| `POST /v1/translate` | a `translate.jobs` message | MinIO `translations/`, `ELASTIC_INDEX_TRANSLATIONS`, `TRANSLATE_CHUNK_INDEX` |
+
+```bash
+curl -X 'POST' \
+  'http://<transcribe-api route>/v1/mom' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "document_ids": ["mom-001"],
+  "tenant_id": "test",
+  "conversation_id": "mom-001",
+  "file_urls": ["mom/mom-audios/Town Council Special Meeting 111925.mp3"],
+  "document_names": ["Town Council Special Meeting 111925.mp3"],
+  "metaData": "{}", "uploadType": "", "grading": "", "data": null, "themes": "",
+  "path": "AsItIs", "user": true, "clientSessionId": "sess-8f2c1a", "queryId": "q-41c9"
+}'
+```
+
+The status says how it went, and the body is always an acknowledgement:
+
+| status | body |
+|---|---|
+| 200 | the SUCCESS ack |
+| 422 | FAILURE ack: no `file_urls` or `path`, so nothing to process |
+| 503 | FAILURE ack: MinIO or Elasticsearch is not reachable from transcribe-api |
+| 500 | FAILURE ack: the job itself failed; `description` says why |
+
+Things to know:
+
+* **The request stays open for the whole job**: about a minute for a short clip, many minutes for a
+  meeting. The route in front of transcribe-api needs `haproxy.router.openshift.io/timeout: 3600s`
+  (see `deploy/openshift/base/route.yaml`), or the router cuts it off after 30 s.
+* **transcribe-api needs the consumers' storage settings** for these endpoints: the `MINIO_*` and
+  `ELASTIC_*` variables, `ENABLE_CHUNK_INDEX`, `CHUNK_INDEX`, and `TRANSLATE_CHUNK_INDEX` for
+  translations. Without them the rest of the API works and these two answer 503.
+* Blank entries in `file_urls` are skipped, and fields we do not use (`prompt`, `additionalProp1`)
+  are accepted and ignored.
+

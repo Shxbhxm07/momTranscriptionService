@@ -795,6 +795,110 @@ def translate_document(
     }
 
 
+# ── the same jobs as the Kafka topics, over HTTP ──────────────────────────────
+#
+# For a backend that would rather call than produce to a topic: POST the JSON a Kafka job carries and
+# get back the acknowledgement the consumer would publish. It is the SAME code, consumer.process and
+# process_translation, so the Word file, MinIO, Elasticsearch and the echoed backend fields behave
+# exactly as they do on Kafka; only the transport differs.
+#
+# THE BODY IS A PLAIN JSON OBJECT, NOT A PYDANTIC MODEL, on purpose. The backend's fields go back
+# exactly as sent, same value and same type, and a typed model would coerce them on the way in:
+# isUser "true" would come back as true, metaData "{}" could come back as an object.
+#
+# The request stays open for the whole job, minutes for a meeting, so the route in front of this API
+# needs the long timeout in deploy/openshift/base/route.yaml.
+import threading  # noqa: E402
+from typing import Any  # noqa: E402
+
+from fastapi import Body  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+
+from config import SELF_API_URL, TRANSLATE_CHUNK_INDEX  # noqa: E402
+from consumer import process, process_translation  # noqa: E402
+from core.kafka_contract import build_ack, parse_job  # noqa: E402
+from core.search_index import ChunkIndex, MomIndex, TranslationIndex  # noqa: E402
+from core.storage import ObjectStore  # noqa: E402
+
+_BACKEND_FIELDS = {
+    "metaData": "{}", "uploadType": "", "grading": "", "data": None, "themes": "",
+    "path": "AsItIs", "user": True, "clientSessionId": "sess-8f2c1a", "queryId": "q-41c9",
+}
+_MOM_JOB_EXAMPLE = {
+    "document_ids": ["mom-001"], "tenant_id": "test", "conversation_id": "mom-001",
+    "file_urls": ["mom/mom-audios/Town Council Special Meeting 111925.mp3"],
+    "document_names": ["Town Council Special Meeting 111925.mp3"], **_BACKEND_FIELDS,
+}
+_TRANSLATE_JOB_EXAMPLE = {
+    "document_ids": ["tr-001"], "tenant_id": "test", "conversation_id": "tr-001",
+    "file_urls": ["mom/mom-audios/Rohit Sharma.wav"],
+    "document_names": ["Rohit Sharma.wav"], **_BACKEND_FIELDS,
+}
+
+# MinIO and Elasticsearch clients, made on first use rather than at startup: everything else this API
+# serves works without them, and an Elasticsearch that is down must not stop it starting.
+_job_clients_cache: Dict[str, Any] = {}
+_job_clients_lock = threading.Lock()
+
+
+def _job_clients(kind: str):
+    with _job_clients_lock:
+        if "store" not in _job_clients_cache:
+            _job_clients_cache["store"] = ObjectStore()
+        if kind not in _job_clients_cache:
+            if kind == "mom":
+                index = MomIndex()
+                index.ensure_indices()
+                _job_clients_cache[kind] = (index, ChunkIndex())
+            else:
+                index = TranslationIndex()
+                index.ensure_index()
+                _job_clients_cache[kind] = (index, ChunkIndex(TRANSLATE_CHUNK_INDEX))
+        return (_job_clients_cache["store"], *_job_clients_cache[kind])
+
+
+def _run_job(payload: Any, kind: str) -> JSONResponse:
+    """200 with the SUCCESS ack; 422 / 503 / 500 with a FAILURE ack, so a caller that only checks the
+    status and one that only reads the body both see the outcome."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="The body must be a JSON object, like a Kafka job.")
+    job = parse_job(payload)
+    if not job.file_urls:
+        return JSONResponse(status_code=422, content=build_ack(
+            job, success=False, description="No file_urls (or path) in the request: nothing to process."))
+    try:
+        store, index, chunks = _job_clients(kind)
+    except Exception as e:
+        logger.error(f"[JOB {job.conversation_id}] MinIO / Elasticsearch not ready: {e}")
+        return JSONResponse(status_code=503, content=build_ack(
+            job, success=False, description=f"Storage not ready — {type(e).__name__}: {e}"))
+    if kind == "mom":
+        ack = process(job, store, index, chunks, api_url=f"{SELF_API_URL}/transcribe-and-generate-mom")
+    else:
+        ack = process_translation(job, store, index, chunks, api_url=f"{SELF_API_URL}/translate-media")
+    return JSONResponse(status_code=200 if ack.get("message") == "SUCCESS" else 500, content=ack)
+
+
+@app.post("/v1/mom")
+def mom_job(payload: Dict[str, Any] = Body(..., openapi_examples={
+        "meeting": {"summary": "A meeting recording already in MinIO", "value": _MOM_JOB_EXAMPLE}})):
+    """Minutes for a recording in MinIO: the `mom.jobs` Kafka message, over HTTP.
+
+    Stores the Word minutes in MinIO, indexes them in Elasticsearch, and returns the acknowledgement
+    the consumer would publish on `mom.acks`. The backend's fields come back exactly as sent.
+    """
+    return _run_job(payload, "mom")
+
+
+@app.post("/v1/translate")
+def translate_job(payload: Dict[str, Any] = Body(..., openapi_examples={
+        "recording": {"summary": "An audio or video file already in MinIO", "value": _TRANSLATE_JOB_EXAMPLE}})):
+    """Hindi ⇄ English translation of the speech in a recording in MinIO: the `translate.jobs` Kafka
+    message, over HTTP. Returns the acknowledgement the consumer would publish on `translate.acks`.
+    """
+    return _run_job(payload, "translate")
+
+
 # NOTE: there is deliberately no transcription-returning endpoint. An earlier revision
 # exposed POST /transcribe; it was removed because "the transcript is internal" is not a
 # property you can claim while also serving it on a public route.
