@@ -54,8 +54,11 @@ class KafkaJob:
         return bool(self.file_fids or self.document_ids)
 
 
-# Sent by the backend, returned by the ack unchanged. Anything not present stays absent.
-ECHO_FIELDS = ("accessVar", "userId", "isUser", "path", "conversationId")
+# Sent by the backend, returned by the ack unchanged: same value, same type ("{}" stays a string,
+# null stays null). Anything not present stays absent. `path` and `conversationId` are the two the
+# ack fills in (build_ack); the rest are the backend's to interpret.
+ECHO_FIELDS = ("accessVar", "userId", "isUser", "user", "path", "conversationId",
+               "clientSessionId", "queryId", "metaData", "uploadType", "grading", "data", "themes")
 
 
 def _dict(value: Any) -> Dict[str, Any]:

@@ -23,7 +23,7 @@ crash mid-job re-delivers the meeting instead of losing it.
 | `document_ids` | yes | echoed back in the ack as `fileIds` — the correlation key |
 | `file_urls` | yes* | MinIO **object keys**, not URLs. The first path segment is the bucket unless `MINIO_INPUT_BUCKET` is set |
 | `path` | yes* | the same thing as a single string, which is what the newer backend sends. Used when `file_urls` is absent |
-| `accessVar`, `userId`, `isUser` | no | returned in the ack exactly as sent, same value and same type. Never parsed or normalised |
+| `accessVar`, `userId`, `isUser`, `user`, `clientSessionId`, `queryId`, `metaData`, `uploadType`, `grading`, `data`, `themes` | no | returned in the ack exactly as sent, same value and same type. Never parsed or normalised |
 | `document_names` | no | original file name; used for the audio's content type and the logs |
 | `file_fids` | — | the "already ingested" path. **Not implemented** — see below |
 
@@ -35,7 +35,7 @@ the answer to its request. Three are returned untouched, two are filled in:
 
 | field | on the way back |
 |---|---|
-| `accessVar`, `userId`, `isUser` | exactly as sent, same value and same JSON type — `isUser: true` returns a boolean, `isUser: "true"` returns that string. Never parsed; `accessVar` is treated as opaque |
+| `accessVar`, `userId`, `isUser`, `user`, `clientSessionId`, `queryId`, `metaData`, `uploadType`, `grading`, `data`, `themes` | exactly as sent, same value and same JSON type — `isUser: true` returns a boolean, `isUser: "true"` returns that string. `metaData: "{}"` returns the string `"{}"`, not an object, and `data: null` returns `null`. Never parsed; `accessVar` is treated as opaque |
 | `path` | where the minutes were stored, as `bucket/key` — the same shape as the audio path it sends us. Unchanged on failure, since there is no file |
 | `conversationId` | the job's id, which is also the Elasticsearch document id |
 
@@ -145,7 +145,7 @@ A second consumer runs the same image with `JOB_KIND=translate` and its own topi
 never waits behind a meeting — each consumer handles one job at a time by design.
 
 The job message and the acknowledgement are **exactly the minutes contract above**: the same fields
-in, the same five backend fields echoed back, `path` filled with where the result was stored. Only
+in, the same backend fields echoed back, `path` filled with where the result was stored. Only
 three things differ:
 
 | | minutes | translation |
