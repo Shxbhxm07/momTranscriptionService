@@ -1,0 +1,19 @@
+# Same pins as ../api/requirements.txt, minus what only audio needed.
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+requests==2.31.0
+
+# Reading the uploaded document: PDF text layer and page images for OCR (pypdfium2), .docx
+# (python-docx, also the JSSD Word writer), scanned pages (pytesseract + Pillow; the tesseract
+# binary and its Hindi/English data come from the Dockerfile).
+pypdfium2==5.13.0
+python-docx==1.2.0
+pytesseract==0.3.13
+Pillow==12.3.0
+
+# The job path: documents in and minutes out of MinIO, the minutes into Elasticsearch, jobs and
+# acknowledgements on Kafka. Pinned to the same versions as the audio service, which runs against
+# the same MinIO, the same 8.x Elasticsearch and the same Kafka.
+minio==7.2.7
+elasticsearch==8.14.0
+kafka-python==2.0.2

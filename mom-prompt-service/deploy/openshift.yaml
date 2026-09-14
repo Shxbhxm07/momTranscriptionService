@@ -1,0 +1,61 @@
+# mom-prompt-service on OpenShift: one Deployment (web + Kafka consumer in one pod), its Service, and a
+# Route for the HTTP endpoint. Values in <angle brackets> are yours to fill; passwords belong in a
+# Secret, not here. Kafka topics to create first: mom-prompt.jobs and mom-prompt.acks.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mom-prompt-service
+  labels: {app: mom-prompt-service}
+spec:
+  replicas: 1                      # one consumer in the group; a second replica would sit idle
+  selector: {matchLabels: {app: mom-prompt-service}}
+  template:
+    metadata: {labels: {app: mom-prompt-service}}
+    spec:
+      containers:
+      - name: mom-prompt-service
+        image: <registry>/<repo>:mom-prompt-service
+        ports: [{containerPort: 8000}]
+        env:
+        - {name: LLAMA_URL, value: "http://llama-service:8001"}
+        - {name: KAFKA_BOOTSTRAP, value: "kafka-service.teamsync.svc.cluster.local:9092"}
+        - {name: KAFKA_JOB_TOPIC, value: "mom-prompt.jobs"}
+        - {name: KAFKA_ACK_TOPIC, value: "mom-prompt.acks"}
+        - {name: KAFKA_GROUP_ID, value: "mom-prompt-consumer"}
+        - {name: MINIO_ENDPOINT, value: "minio-service.teamsync.svc.cluster.local:9000"}
+        - {name: MINIO_SECURE, value: "false"}
+        - {name: MINIO_SUMMARY_BUCKET, value: "mom"}
+        - {name: ELASTIC_URL, value: "http://elasticsearch-service.teamsync.svc.cluster.local:9200"}
+        - {name: ELASTIC_INDEX_ATTACHED, value: "mom-attached"}
+        - {name: ENABLE_CHUNK_INDEX, value: "true"}
+        - {name: CHUNK_INDEX, value: "mom_v1"}
+        - {name: MINIO_ACCESS_KEY, valueFrom: {secretKeyRef: {name: <secret>, key: MINIO_ACCESS_KEY}}}
+        - {name: MINIO_SECRET_KEY, valueFrom: {secretKeyRef: {name: <secret>, key: MINIO_SECRET_KEY}}}
+        - {name: ELASTIC_USER, valueFrom: {secretKeyRef: {name: <secret>, key: ELASTIC_USER}}}
+        - {name: ELASTIC_PASSWORD, valueFrom: {secretKeyRef: {name: <secret>, key: ELASTIC_PASSWORD}}}
+        resources:
+          requests: {cpu: 500m, memory: 512Mi}
+          limits: {memory: 2Gi}     # OCR of a long scan and LibreOffice's page count are the peaks
+        livenessProbe:              # "/" also fails if the Kafka consumer thread has died
+          httpGet: {path: /, port: 8000}
+          initialDelaySeconds: 20
+          periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mom-prompt-service}
+spec:
+  selector: {app: mom-prompt-service}
+  ports: [{port: 8000, targetPort: 8000}]
+---
+# Only for the HTTP endpoint. The timeout is required: a job holds the request open until the minutes
+# are written, and the router's default of 30 s would cut it off.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mom-prompt-service
+  annotations:
+    haproxy.router.openshift.io/timeout: 3600s
+spec:
+  to: {kind: Service, name: mom-prompt-service}
+  port: {targetPort: 8000}
